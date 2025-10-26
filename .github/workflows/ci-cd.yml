@@ -24,9 +24,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
-        run: aws ecr get-login-password --region "$AWS_REGION" \
-             | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: 875551125619
 
       - name: Compute tags
         id: tags
