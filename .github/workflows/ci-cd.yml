@@ -48,7 +48,6 @@ jobs:
 
   deploy_via_ssm:
     needs: build_and_push
-    if: ${{ env.EC2_INSTANCE_ID != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
