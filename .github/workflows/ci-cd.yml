@@ -1,6 +1,83 @@
+name: ci-cd
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 875551125619.dkr.ecr.us-east-1.amazonaws.com
-  BE_REPO: finanzas-backend
-  FE_REPO: finanzas-frontend
-  EC2_INSTANCE_ID:
+  BE_REPO: fintracker-backend
+  FE_REPO: fintracker-frontend
+  EC2_INSTANCE_ID: "i-0543a3b0c146f3cbb"
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        run: aws ecr get-login-password --region "$AWS_REGION" \
+             | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Compute tags
+        id: tags
+        run: |
+          SHA="${GITHUB_SHA::7}"
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Build & push backend
+        run: |
+          docker build --pull -t "$ECR_REGISTRY/$BE_REPO:latest" -t "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}" ./backend
+          docker push "$ECR_REGISTRY/$BE_REPO:latest"
+          docker push "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}"
+
+      - name: Build & push frontend
+        run: |
+          docker build --pull -t "$ECR_REGISTRY/$FE_REPO:latest" -t "$ECR_REGISTRY/$FE_REPO:${{ steps.tags.outputs.sha }}" ./frontend
+          docker push "$ECR_REGISTRY/$FE_REPO:latest"
+          docker push "$ECR_REGISTRY/$FE_REPO:${{ steps.tags.outputs.sha }}"
+
+  deploy_via_ssm:
+    needs: build_and_push
+    if: ${{ env.EC2_INSTANCE_ID != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Send deploy command via SSM
+        id: ssm
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Fintracker deployment" \
+            --parameters '{
+              "commands": [
+                "cd /home/ec2-user/app",
+                "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
+                "docker compose pull",
+                "docker compose up -d"
+              ]
+            }' \
+            --query "Command.CommandId" \
+            --output text)
+          echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for completion
+        run: |
+          aws ssm wait command-executed \
+            --command-id "${{ steps.ssm.outputs.cmd_id }}" \
+            --instance-id "$EC2_INSTANCE_ID"
