@@ -80,3 +80,12 @@ jobs:
           aws ssm wait command-executed \
             --command-id "${{ steps.ssm.outputs.cmd_id }}" \
             --instance-id "$EC2_INSTANCE_ID"
+
+      - name: Fetch SSM command output on failure
+        if: ${{ failure() }}
+        run: |
+          aws ssm get-command-invocation \
+            --command-id "${{ steps.ssm.outputs.cmd_id }}" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query '{Status:Status, StdOut:StandardOutputContent, StdErr:StandardErrorContent}' \
+            --output text
