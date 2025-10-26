@@ -65,15 +65,21 @@ jobs:
             --comment "Fintracker deployment" \
             --parameters '{
               "commands": [
+                "set -euo pipefail",
                 "cd /home/ec2-user/app",
-                "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
-                "docker compose pull",
-                "docker compose up -d"
+                "sudo dnf -y install docker-compose-plugin || true",
+                "docker --version || true",
+                "docker compose version || docker-compose --version || true",
+                "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'", 
+                "(docker compose pull || docker-compose pull)",
+                "(docker compose up -d || docker-compose up -d)",
+                "echo DEPLOY DONE"
               ]
             }' \
             --query "Command.CommandId" \
             --output text)
           echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
+
 
       - name: Wait for completion
         run: |
