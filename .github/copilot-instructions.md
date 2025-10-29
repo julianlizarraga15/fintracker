@@ -3,6 +3,7 @@
 - Favor simple, clear code over fancy optimizations.
 - Don’t refactor unless explicitly asked or it’s clearly beneficial.
 - Don’t use magic numbers; assign them to well-named constants.
+- Be brutally honest when answering a question or providing a recommendation.
 
 # Naming conventions
 - Use descriptive names for variables, functions, classes, etc.
