@@ -12,12 +12,7 @@
 
 # Design & structure
 - Prefer separation of concerns; use OOP when it makes sense — don’t overdo it.
-- Comments should explain context, trade-offs, and rationale, but keep them minimal.
-- If you add a class or aggregation, consider domain logic: e.g.  
-  - A **Product** aggregates **Items** or **UserProducts**  
-  - A **UserProduct** aggregates Items for a given seller with pricing / discount rules  
-  - A Product can have multiple UserProducts (from different sellers)  
-  - A Product can have multiple Items (from different sellers)
+- Comments should explain context, trade-offs, and rationale, but keep them minimal. Don't add unnecessary comments.
 
 # Project tooling / environment
 - Use **Poetry** for environment & package management.
@@ -34,4 +29,4 @@
 - If uncertain, ask first rather than assuming major changes.
 
 # Code execution
-- Run the code in the virtual environment with `.venv/bin/python <script>` to ensure compatibility.
+- Use `.venv/bin/python <path_to_script>` to run code. This will make sure the correct environment is used.
