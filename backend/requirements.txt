@@ -3,3 +3,5 @@ uvicorn[standard]==0.32.0
 requests
 pandas
 python-dotenv
+pyarrow
+boto3
