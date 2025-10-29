@@ -41,7 +41,11 @@ def main():
         print(f"Saved -> {info['parquet']}")
 
     # Optional: upload to S3 if configured
-    maybe_upload_to_s3([info.get("csv"), info.get("parquet")], info.get("dt"))
+    upload_csv = False
+    if upload_csv:
+        maybe_upload_to_s3([info.get("csv"), info.get("parquet")], info.get("dt"))
+    else:
+        maybe_upload_to_s3([info.get("parquet")], info.get("dt"))
 
     # Quick totals by currency
     print("\nTotals by currency:")
