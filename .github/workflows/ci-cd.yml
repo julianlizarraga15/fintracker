@@ -69,6 +69,7 @@ jobs:
                 "cd /home/ec2-user/fintracker",
                 "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
                 "docker-compose pull",
+                "docker-compose down --remove-orphans",
                 "docker-compose up -d",
                 "echo DEPLOY DONE"
               ]
