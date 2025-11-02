@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     image: 875551125619.dkr.ecr.us-east-1.amazonaws.com/fintracker-backend:latest
