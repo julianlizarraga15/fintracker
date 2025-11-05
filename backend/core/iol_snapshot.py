@@ -2,7 +2,7 @@ from backend.core.config import IOL_USERNAME, IOL_PASSWORD, ACCOUNT_ID
 from backend.core.iol_client import get_bearer_tokens, get_positions
 from backend.core.iol_transform import extract_positions_as_df
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
-from backend.core.iol_client import get_prices_for_positions
+from backend.core.iol_client import get_prices_for_positions, get_fx_rates
 import pandas as pd
 
 
@@ -71,10 +71,53 @@ def main():
             print(f"\nSaved prices -> {info_prices['csv']}")
             if info_prices.get("parquet"):
                 print(f"Saved prices -> {info_prices['parquet']}")
+            if upload_csv:
+                maybe_upload_to_s3(
+                    [info_prices.get("csv"), info_prices.get("parquet")],
+                    info_prices.get("dt"),
+                    resource_name="prices",
+                )
+            else:
+                maybe_upload_to_s3(
+                    [info_prices.get("parquet")],
+                    info_prices.get("dt"),
+                    resource_name="prices",
+                )
         else:
             print("No prices fetched from IOL.")
     except Exception as e:
         print(f"Error fetching/saving prices: {e}")
+
+    try:
+        fx_rates = get_fx_rates()
+        if fx_rates:
+            df_fx = pd.DataFrame([r.model_dump() for r in fx_rates])
+            info_fx = save_snapshot_files(
+                df_fx,
+                resource_name="fx",
+                source="dolarapi_blue_venta",
+            )
+            print(f"\nSaved FX rates -> {info_fx['csv']}")
+            if info_fx.get("parquet"):
+                print(f"Saved FX rates -> {info_fx['parquet']}")
+            if upload_csv:
+                maybe_upload_to_s3(
+                    [info_fx.get("csv"), info_fx.get("parquet")],
+                    info_fx.get("dt"),
+                    resource_name="fx",
+                    source="dolarapi_blue_venta",
+                )
+            else:
+                maybe_upload_to_s3(
+                    [info_fx.get("parquet")],
+                    info_fx.get("dt"),
+                    resource_name="fx",
+                    source="dolarapi_blue_venta",
+                )
+        else:
+            print("No FX rates fetched.")
+    except Exception as e:
+        print(f"Error fetching/saving FX rates: {e}")
 
 
 if __name__ == "__main__":
