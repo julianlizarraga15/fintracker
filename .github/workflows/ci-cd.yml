@@ -36,7 +36,7 @@ jobs:
 
       - name: Build & push backend
         run: |
-          docker build --pull -t "$ECR_REGISTRY/$BE_REPO:latest" -t "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}" ./backend
+          docker build --pull -t "$ECR_REGISTRY/$BE_REPO:latest" -t "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}" -f backend/Dockerfile .
           docker push "$ECR_REGISTRY/$BE_REPO:latest"
           docker push "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}"
 
