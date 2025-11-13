@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data
 
   frontend:
     image: 875551125619.dkr.ecr.us-east-1.amazonaws.com/fintracker-frontend:latest
