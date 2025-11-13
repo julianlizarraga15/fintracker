@@ -3,7 +3,7 @@
 Personal finance tracker for pulling brokerage positions, computing valuations, and surfacing them through containerized services.
 
 ## Architecture
-- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.iol_snapshot`.
+- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.iol_snapshot`. The API exposes `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
 - **Frontend (`frontend/`)**: Static site served through Nginx; currently a placeholder awaiting data from the backend.
 - **Docker Compose (`docker-compose.yml`)**: Builds/runs backend, frontend, and Nginx reverse proxy with stable container names (e.g., `fintracker-backend`).
 - **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to load `.env` (when present) and run the snapshot job.
@@ -33,7 +33,6 @@ Systemd units (not checked into the repo) live at:
 Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now valuations.timer`. Logs: `journalctl -u valuations.service`.
 
 ## Roadmap / Next Steps
-- Backend endpoint to expose the latest valuation snapshot (`GET /valuations/latest`).
 - Frontend UI that fetches and displays current totals and per-position data.
 - Historical views (charts, time series storage beyond CSV/Parquet).
 - Optional S3 uploads for valuations alongside positions/prices/FX snapshots.
