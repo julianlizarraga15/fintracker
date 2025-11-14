@@ -1,5 +1,6 @@
 import pandas as pd
 from .config import ACCOUNT_ID
+from .iol_utils import resolve_currency
 
 
 def extract_positions_as_df(items) -> pd.DataFrame:
@@ -22,7 +23,7 @@ def extract_positions_as_df(items) -> pd.DataFrame:
         if isinstance(titulo, dict):
             symbol = titulo.get("simbolo")
             description = titulo.get("descripcion")
-            currency = titulo.get("moneda")
+            currency = resolve_currency(it)
             instr_type = titulo.get("tipo") or it.get("tipoInstrumento")
             qty = it.get("cantidad") or it.get("cantidadNominal")
             price = it.get("ultimoPrecio") or it.get("precio")
@@ -35,7 +36,7 @@ def extract_positions_as_df(items) -> pd.DataFrame:
             # B) Flat schema
             symbol = it.get("simbolo") or it.get("ticker") or it.get("codigo")
             description = it.get("descripcion")
-            currency = it.get("moneda") or it.get("divisa")
+            currency = resolve_currency(it)
             instr_type = it.get("tipoInstrumento") or it.get("instrumento") or it.get("tipo")
             qty = it.get("cantidad") or it.get("cantidadNominal")
             price = it.get("ultimoPrecio") or it.get("precio")

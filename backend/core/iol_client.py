@@ -5,6 +5,7 @@ from typing import Any, List, Optional, Tuple
 import requests
 
 from ..valuation import models as valuation_models
+from .iol_utils import resolve_currency
 
 BASE_URL = "https://api.invertironline.com"
 TOKEN_ENDPOINT = "/token"
@@ -195,13 +196,15 @@ def get_prices_for_positions(items: List[dict], access_token: str) -> List[valua
             if not res:
                 continue
             symbol, market, instr_type = res
+            currency_hint = resolve_currency(it)
 
             # quick skip if the position already has a price
             for fld in ("ultimoPrecio", "precio", "ultimo", "last"):
-                if (isinstance(it.get(fld), (int, float)) or (isinstance(it.get(fld), str) and it.get(fld).replace('.', '', 1).isdigit())):
+                raw_value = it.get(fld)
+                if isinstance(raw_value, (int, float)) or (isinstance(raw_value, str) and raw_value.replace('.', '', 1).isdigit()):
                     # We already have a price; build a Price model from it instead of fetching
                     try:
-                        price_val = float(it.get(fld))
+                        price_val = float(raw_value)
                     except Exception:
                         price_val = None
                     if price_val is not None:
@@ -211,7 +214,7 @@ def get_prices_for_positions(items: List[dict], access_token: str) -> List[valua
                             symbol=symbol,
                             price_type="last",
                             price=price_val,
-                            currency=it.get("moneda") or it.get("divisa") or "ARS",
+                            currency=currency_hint or "ARS",
                             venue=market,
                             source="iol",
                             quality_score=100,
@@ -223,6 +226,8 @@ def get_prices_for_positions(items: List[dict], access_token: str) -> List[valua
                 panel = _guess_panel(instr_type)
                 p = get_price_for_symbol(symbol, market or "argentina", panel, access_token)
                 if p:
+                    if not p.currency:
+                        p = p.model_copy(update={"currency": currency_hint or "ARS"})
                     out.append(p)
         except Exception:
             LOG.exception("unexpected error while fetching price for position: %r", it)
