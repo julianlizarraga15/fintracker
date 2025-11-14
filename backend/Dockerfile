@@ -6,7 +6,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend /app/backend
-COPY scripts/run_valuations.sh /app/scripts/run_valuations.sh
+COPY scripts /app/scripts
 
 RUN chmod +x /app/scripts/run_valuations.sh
 

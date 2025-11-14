@@ -25,6 +25,20 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
    ```
    The script ensures `.env` variables are loaded and is what automation invokes.
 
+## Fetching Santander Mutual-Fund NAV
+We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA headers, boots a session via the public landing page, and calls `https://www.santander.com.ar/fondosInformacion/funds/<id>/detail` to retrieve `currentShareValue` (`valor de la cuotaparte`) plus its date.
+
+- **Local run** (after `pip install -r backend/requirements.txt`):
+  ```bash
+  python scripts/fetch_santander_nav.py 1 2
+  ```
+  Include any fund ids you track (defaults to `1`). The script prints `Fund <id>: <value> (as of <timestamp>)`.
+- **Inside backend container** (after `docker compose build backend` to copy the script):
+  ```bash
+  docker compose exec backend python /app/scripts/fetch_santander_nav.py 1
+  ```
+- The script deliberately warms up a session against the info landing page and sends Santander's required headers (`channel-name`, `x-ibm-client-id`, `sec-fetch-*`, etc.). Plain `curl` without those headers is rejected with “Servicio temporalmente no disponible”, so always run this helper instead of hand-rolling the request.
+
 ## Testing
 Backend tests live under `backend/tests/` (e.g., `test_valuations.py` verifies snapshot loading plus error handling). Run them with:
 ```bash
