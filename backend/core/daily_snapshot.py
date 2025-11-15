@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+from math import nan
 
 from backend.core.config import IOL_USERNAME, IOL_PASSWORD, ACCOUNT_ID
 from backend.core.iol_client import get_bearer_tokens, get_positions
@@ -15,6 +16,20 @@ from backend.valuation.models import (
     compute_valuations,
 )
 import pandas as pd
+
+
+def _print_section(title: str) -> None:
+    print(f"\n{title}")
+    print("-" * len(title))
+
+
+def _log_snapshot_paths(resource: str, info: dict) -> None:
+    csv_path = info.get("csv")
+    parquet_path = info.get("parquet")
+    if csv_path:
+        print(f"[{resource}] CSV saved -> {csv_path}")
+    if parquet_path:
+        print(f"[{resource}] Parquet saved -> {parquet_path}")
 
 BASE_CURRENCY = "USD"
 
@@ -46,6 +61,8 @@ def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
 def _manual_positions_df(holdings: list[SantanderHolding]) -> pd.DataFrame:
     rows = []
     for holding in holdings:
+        price = holding.get("price")
+        valuation = holding.get("valuation")
         rows.append(
             {
                 "symbol": holding["symbol"],
@@ -56,8 +73,8 @@ def _manual_positions_df(holdings: list[SantanderHolding]) -> pd.DataFrame:
                 "account_id": holding["account_id"],
                 "currency": holding["currency"],
                 "quantity": holding["quantity"],
-                "price": None,
-                "valuation": None,
+                "price": price if price is not None else nan,
+                "valuation": valuation if valuation is not None else nan,
             }
         )
 
@@ -90,7 +107,12 @@ def main():
     if santander_holdings:
         manual_df = _manual_positions_df(santander_holdings)
         if not manual_df.empty:
-            df = pd.concat([df, manual_df], ignore_index=True) if not df.empty else manual_df
+            if not df.empty:
+                combined_rows = df.to_dict(orient="records")
+                combined_rows.extend(manual_df.to_dict(orient="records"))
+                df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+            else:
+                df = manual_df
         for holding in santander_holdings:
             holdings_by_fund_id.setdefault(holding["fund_id"], []).append(holding)
         if santander_holdings:
@@ -105,14 +127,21 @@ def main():
             pass
         return
 
-    print("df shape:", df.shape)
-    print(df)
+    _print_section(f"Positions ({df.shape[0]} rows x {df.shape[1]} cols)")
+    with pd.option_context(
+        "display.max_columns",
+        None,
+        "display.width",
+        140,
+        "display.float_format",
+        lambda val: f"{val:,.2f}",
+    ):
+        print(df.to_string(index=False))
 
     # Save snapshot files (partitioned by date/source/account)
     info = save_snapshot_files(df)
-    print(f"\nSaved -> {info['csv']}")
-    if info.get("parquet"):
-        print(f"Saved -> {info['parquet']}")
+    _print_section("Positions snapshot saved")
+    _log_snapshot_paths("positions", info)
 
     # Optional: upload to S3 if configured
     upload_csv = False
@@ -122,9 +151,12 @@ def main():
         maybe_upload_to_s3([info.get("parquet")], info.get("dt"))
 
     # Quick totals by currency
-    print("\nTotals by currency:")
     try:
-        print(df.groupby("currency")["valuation"].sum())
+        totals = df.groupby("currency")["valuation"].sum().dropna()
+        if not totals.empty:
+            _print_section("Totals by currency")
+            formatted_totals = totals.apply(lambda val: f"{val:,.2f}")
+            print(formatted_totals.to_string())
     except Exception:
         pass
 
@@ -179,9 +211,8 @@ def main():
             if not df_prices.empty:
                 df_prices["account_id"] = ACCOUNT_ID
             info_prices = save_snapshot_files(df_prices, resource_name="prices")
-            print(f"\nSaved prices -> {info_prices['csv']}")
-            if info_prices.get("parquet"):
-                print(f"Saved prices -> {info_prices['parquet']}")
+            _print_section("Prices snapshot saved")
+            _log_snapshot_paths("prices", info_prices)
             if upload_csv:
                 maybe_upload_to_s3(
                     [info_prices.get("csv"), info_prices.get("parquet")],
@@ -209,9 +240,8 @@ def main():
                 resource_name="fx",
                 source="dolarapi_blue_venta",
             )
-            print(f"\nSaved FX rates -> {info_fx['csv']}")
-            if info_fx.get("parquet"):
-                print(f"Saved FX rates -> {info_fx['parquet']}")
+            _print_section("FX rates saved")
+            _log_snapshot_paths("fx", info_fx)
             if upload_csv:
                 maybe_upload_to_s3(
                     [info_fx.get("csv"), info_fx.get("parquet")],
@@ -239,7 +269,7 @@ def main():
             snapshot_dt = date.today()
 
         pos_models = []
-        snapshot_ts = datetime.utcnow()
+        snapshot_ts = datetime.now(timezone.utc)
         for row in df.to_dict(orient="records"):
             symbol = row.get("symbol")
             if not symbol:
@@ -282,9 +312,8 @@ def main():
                 resource_name="valuations",
                 account_id=ACCOUNT_ID,
             )
-            print(f"\nSaved valuations -> {info_val['csv']}")
-            if info_val.get("parquet"):
-                print(f"Saved valuations -> {info_val['parquet']}")
+            _print_section("Valuations saved")
+            _log_snapshot_paths("valuations", info_val)
             if upload_csv:
                 maybe_upload_to_s3(
                     [info_val.get("csv"), info_val.get("parquet")],

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 import os
 
 from .config import OUTPUT_DIR, S3_BUCKET, S3_PREFIX, ACCOUNT_ID
+
+_BUCKET_NOTICE_EMITTED = False
+_CREDENTIAL_NOTICE_EMITTED = False
 
 
 # --------------------------- helpers ---------------------------
@@ -49,7 +52,7 @@ def save_snapshot_files(
 
     Returns {"csv": str|None, "parquet": str|None, "dt": "YYYY-MM-DD"}.
     """
-    ts = datetime.utcnow()
+    ts = datetime.now(timezone.utc)
     dt = ts.strftime("%Y-%m-%d")
 
     out_dir = Path(OUTPUT_DIR)
@@ -64,7 +67,7 @@ def save_snapshot_files(
 
     # attach timestamp column
     df_out = df.copy()
-    df_out["snapshot_ts"] = ts.isoformat(timespec="seconds") + "Z"
+    df_out["snapshot_ts"] = ts.isoformat(timespec="seconds").replace("+00:00", "Z")
 
     df_out.to_csv(csv_path, index=False)
 
@@ -91,8 +94,12 @@ def maybe_upload_to_s3(
     If S3_BUCKET is set, upload given local file paths to:
       s3://{S3_BUCKET}/{S3_PREFIX}{resource}/dt=.../[...]/filename
     """
+    global _BUCKET_NOTICE_EMITTED, _CREDENTIAL_NOTICE_EMITTED
+
     if not S3_BUCKET:
-        print("[info] S3 bucket not set; skipping upload.")
+        if not _BUCKET_NOTICE_EMITTED:
+            print("[info] S3 bucket not set; skipping upload.")
+            _BUCKET_NOTICE_EMITTED = True
         return
 
     try:
@@ -114,6 +121,13 @@ def maybe_upload_to_s3(
         else:
             # Let boto3 fall back to its normal credential resolution chain
             session = boto3.Session()
+
+        credentials = session.get_credentials()
+        if credentials is None or not credentials.access_key:
+            if not _CREDENTIAL_NOTICE_EMITTED:
+                print("[info] AWS credentials not configured; skipping S3 upload.")
+                _CREDENTIAL_NOTICE_EMITTED = True
+            return
 
         s3 = session.client("s3")
 
