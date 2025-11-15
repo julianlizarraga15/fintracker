@@ -3,7 +3,7 @@
 Personal finance tracker for pulling brokerage positions, computing valuations, and surfacing them through containerized services.
 
 ## Architecture
-- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.iol_snapshot`. The API exposes `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
+- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.daily_snapshot`. The API exposes `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
 - **Frontend (`frontend/`)**: Static site served through Nginx that queries `/api/valuations/latest` and renders the latest snapshot (status chip, totals, per-position table, etc.) for a provided account id.
 - **Docker Compose (`docker-compose.yml`)**: Builds/runs backend, frontend, and Nginx reverse proxy with stable container names (e.g., `fintracker-backend`).
 - **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to load `.env` (when present) and run the snapshot job.
@@ -16,7 +16,7 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
 2. **Local run**
    ```bash
    docker-compose up -d
-   docker-compose exec backend python -m backend.core.iol_snapshot
+   docker-compose exec backend python -m backend.core.daily_snapshot
    ```
    Generated CSV/Parquet files land under `data/positions/...`.
 3. **Manual valuation run inside a container**
@@ -39,6 +39,32 @@ We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA heade
   ```
 - The script deliberately warms up a session against the info landing page and sends Santander's required headers (`channel-name`, `x-ibm-client-id`, `sec-fetch-*`, etc.). Plain `curl` without those headers is rejected with “Servicio temporalmente no disponible”, so always run this helper instead of hand-rolling the request.
 
+### Santander funds inside the daily valuation flow
+
+`python -m backend.core.daily_snapshot` now loads manual Santander holdings before saving the daily CSV/Parquet snapshots. Add your mutual funds to `data/manual/santander_holdings.json` (override with `SANTANDER_HOLDINGS_FILE` if you prefer another path). Each entry describes how many cuotapartes you currently hold:
+
+```json
+[
+  {
+    "fund_id": "1",
+    "symbol": "SUPERFONACC",
+    "display_name": "Superfondo Acciones",
+    "quantity": 123.45,
+    "currency": "ARS",
+    "market": "santander",
+    "source": "santander"
+  }
+]
+```
+
+During the snapshot run we:
+
+- merge these manual holdings with the broker feed so storage/valuations always see a single consolidated positions file;
+- call the Santander SPA endpoint only for the fund ids present in the JSON and persist those NAV quotes under `data/positions/prices/...` alongside the IOL quotes;
+- feed the NAV values into `compute_valuations`, so the frontend totals reflect both the brokerage account and the mutual funds you maintain outside of IOL.
+
+Edit `quantity` whenever you buy/sell cuotapartes and the next systemd run (or a manual `docker exec ... run_valuations.sh`) will pull the latest NAV automatically.
+
 ## Testing
 Backend tests live under `backend/tests/` (e.g., `test_valuations.py` verifies snapshot loading plus error handling). Run them with:
 ```bash
@@ -56,7 +82,7 @@ Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now va
 
 ## Roadmap / Next Steps
 - Frontend polish: filters, sortable columns, and lightweight charts on top of the existing snapshot view.
-- Fetch mutual fund "cuotaparte" (share value) data from Santander so valuations cover those products.
+- Streamline manual asset inputs (web form / CLI) so keeping Santander holdings up to date is simpler.
 - Historical views (charts, time series storage beyond CSV/Parquet).
 - Optional S3 uploads for valuations alongside positions/prices/FX snapshots.
 - Alerting around failed valuation runs (CloudWatch or similar).

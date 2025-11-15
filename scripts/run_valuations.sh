@@ -12,4 +12,4 @@ if [[ -f .env ]]; then
   set +o allexport
 fi
 
-python -m backend.core.iol_snapshot
+python -m backend.core.daily_snapshot

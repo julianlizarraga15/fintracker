@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, date
 
 from backend.core.config import IOL_USERNAME, IOL_PASSWORD, ACCOUNT_ID
@@ -5,10 +7,64 @@ from backend.core.iol_client import get_bearer_tokens, get_positions
 from backend.core.iol_transform import extract_positions_as_df
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
 from backend.core.iol_client import get_prices_for_positions, get_fx_rates
-from backend.valuation.models import Position as PositionModel, compute_valuations
+from backend.core.santander_holdings import SantanderHolding, load_holdings
+from backend.core.santander_nav import fetch_share_values as fetch_santander_nav_values
+from backend.valuation.models import (
+    Position as PositionModel,
+    Price as PriceModel,
+    compute_valuations,
+)
 import pandas as pd
 
 BASE_CURRENCY = "USD"
+
+POSITION_COLUMNS = [
+    "symbol",
+    "description",
+    "instrument_type",
+    "market",
+    "source",
+    "account_id",
+    "currency",
+    "quantity",
+    "price",
+    "valuation",
+]
+
+
+def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
+    if not raw_value:
+        return date.today(), None
+    sanitized = raw_value.replace("Z", "+00:00")
+    try:
+        ts = datetime.fromisoformat(sanitized)
+    except ValueError:
+        return date.today(), None
+    return ts.date(), ts
+
+
+def _manual_positions_df(holdings: list[SantanderHolding]) -> pd.DataFrame:
+    rows = []
+    for holding in holdings:
+        rows.append(
+            {
+                "symbol": holding["symbol"],
+                "description": holding.get("display_name"),
+                "instrument_type": "fci",
+                "market": holding["market"],
+                "source": holding["source"],
+                "account_id": holding["account_id"],
+                "currency": holding["currency"],
+                "quantity": holding["quantity"],
+                "price": None,
+                "valuation": None,
+            }
+        )
+
+    df_manual = pd.DataFrame(rows)
+    if df_manual.empty:
+        return df_manual
+    return df_manual.reindex(columns=POSITION_COLUMNS)
 
 
 def main():
@@ -28,6 +84,17 @@ def main():
     # set account_id column if present
     if not df.empty:
         df["account_id"] = ACCOUNT_ID
+
+    santander_holdings = load_holdings()
+    holdings_by_fund_id: dict[str, list[SantanderHolding]] = {}
+    if santander_holdings:
+        manual_df = _manual_positions_df(santander_holdings)
+        if not manual_df.empty:
+            df = pd.concat([df, manual_df], ignore_index=True) if not df.empty else manual_df
+        for holding in santander_holdings:
+            holdings_by_fund_id.setdefault(holding["fund_id"], []).append(holding)
+        if santander_holdings:
+            print(f"Loaded {len(santander_holdings)} Santander manual holdings.")
 
     if df.empty:
         print("No positions found or unexpected API format.")
@@ -62,15 +129,53 @@ def main():
         pass
 
     # Fetch and persist prices for the current positions (simple inline behavior)
-    prices = []
+    prices: list[PriceModel] = []
     try:
         prices = get_prices_for_positions(raw_items, access_token)
-        if prices:
-            # Convert list of Pydantic models to DataFrame
-            # Use `model_dump()` for Pydantic v2 instead of deprecated `dict()`
+    except Exception as e:
+        print(f"Error fetching prices from IOL: {e}")
+
+    nav_display_names: dict[str, str] = {}
+    santander_price_models: list[PriceModel] = []
+    if holdings_by_fund_id:
+        try:
+            fund_ids = list(holdings_by_fund_id.keys())
+            nav_rows = fetch_santander_nav_values(fund_ids)
+            for nav_row in nav_rows:
+                fund_id = nav_row["fund_id"]
+                holdings = holdings_by_fund_id.get(fund_id) or []
+                asof_dt, asof_ts = _parse_nav_timestamp(nav_row.get("current_share_value_date"))
+                for holding in holdings:
+                    santander_price_models.append(
+                        PriceModel(
+                            asof_dt=asof_dt,
+                            asof_ts=asof_ts,
+                            symbol=holding["symbol"],
+                            price_type="nav",
+                            price=nav_row["current_share_value"],
+                            currency=holding["currency"],
+                            venue="SANTANDER",
+                            source="santander_nav",
+                            quality_score=95,
+                        )
+                    )
+                    fund_name = nav_row.get("fund_name")
+                    if fund_name:
+                        nav_display_names[holding["symbol"]] = fund_name
+        except Exception as e:
+            print(f"Error fetching Santander NAV: {e}")
+
+    if nav_display_names and not df.empty:
+        for symbol, display_name in nav_display_names.items():
+            df.loc[df["symbol"] == symbol, "description"] = display_name
+
+    if santander_price_models:
+        prices.extend(santander_price_models)
+
+    if prices:
+        try:
             rows = [p.model_dump() for p in prices]
             df_prices = pd.DataFrame(rows)
-            # attach account id for consistency with positions
             if not df_prices.empty:
                 df_prices["account_id"] = ACCOUNT_ID
             info_prices = save_snapshot_files(df_prices, resource_name="prices")
@@ -89,10 +194,10 @@ def main():
                     info_prices.get("dt"),
                     resource_name="prices",
                 )
-        else:
-            print("No prices fetched from IOL.")
-    except Exception as e:
-        print(f"Error fetching/saving prices: {e}")
+        except Exception as e:
+            print(f"Error saving prices snapshot: {e}")
+    else:
+        print("No prices fetched from IOL or Santander.")
 
     fx_rates = []
     try:

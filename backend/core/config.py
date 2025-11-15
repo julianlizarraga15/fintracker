@@ -21,3 +21,8 @@ def short_account_id(email: str) -> str:
     return hashlib.sha1(email.encode()).hexdigest()[:8]
 
 ACCOUNT_ID = short_account_id(ACCOUNT_EMAIL)
+
+SANTANDER_HOLDINGS_FILE = os.getenv(
+    "SANTANDER_HOLDINGS_FILE",
+    os.path.join("data", "manual", "santander_holdings.json"),
+)
