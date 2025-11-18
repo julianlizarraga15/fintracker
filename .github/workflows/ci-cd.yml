@@ -65,6 +65,7 @@ jobs:
             --comment "Fintracker deployment" \
             --parameters '{
               "commands": [
+                "export HOME=/home/ec2-user",
                 "set -euo pipefail",
                 "cd /home/ec2-user/fintracker",
                 "git config --global --add safe.directory /home/ec2-user/fintracker",
