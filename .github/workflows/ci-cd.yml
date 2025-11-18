@@ -67,6 +67,7 @@ jobs:
               "commands": [
                 "set -euo pipefail",
                 "cd /home/ec2-user/fintracker",
+                "git config --global --add safe.directory /home/ec2-user/fintracker",
                 "echo Pulling latest repository changes...",
                 "git pull --rebase",
                 "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
