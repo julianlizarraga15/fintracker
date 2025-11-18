@@ -9,6 +9,10 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
 - **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to load `.env` (when present) and run the snapshot job.
 - **Infrastructure**: Deployed to EC2; a systemd timer on the host runs `docker exec fintracker-backend /app/scripts/run_valuations.sh` daily at 16:00 UTC (13:00 UTC-3) to keep valuations up to date.
 
+## Deploy (GitHub Actions + SSM)
+- CI/CD builds/pushes images to ECR, then SSM runs `git pull`, `docker-compose pull/down/up`, and restarts the stack on EC2. It sets `HOME=/home/ec2-user` and marks `/home/ec2-user/fintracker` as a Git safe.directory so pulls work.
+- On EC2, always run `docker-compose` from the repo root so the backend bind mount `./data:/app/data` is applied and snapshots write to disk.
+
 ## Getting Started
 1. **Prerequisites**
    - Docker / Docker Compose
@@ -86,3 +90,8 @@ Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now va
 - Historical views (charts, time series storage beyond CSV/Parquet).
 - Optional S3 uploads for valuations alongside positions/prices/FX snapshots.
 - Alerting around failed valuation runs (CloudWatch or similar).
+
+## Manual crypto holdings (prep for BTC/ETH)
+- To start tracking crypto balances manually, add `data/manual/crypto_holdings.json` (or point `CRYPTO_HOLDINGS_FILE` to another path).
+- Schema per entry: `symbol` (e.g. `"BTC"`), `quantity`, optional `display_name`, `currency` (defaults to USD), `market` (e.g. `"crypto"`), `source` (e.g. `"manual"`), `account_id` (falls back to env-derived account id).
+- The plan is to auto-fetch BTC/ETH prices (CoinGecko simple price) and fold these rows into the daily snapshot; wiring can be enabled next if you want this live in valuations.
