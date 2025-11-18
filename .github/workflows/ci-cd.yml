@@ -68,7 +68,7 @@ jobs:
                 "set -euo pipefail",
                 "cd /home/ec2-user/fintracker",
                 "echo Pulling latest repository changes...",
-                "git pull --rebase || true",
+                "git pull --rebase",
                 "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
                 "docker-compose pull",
                 "docker-compose down --remove-orphans",
