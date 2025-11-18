@@ -209,3 +209,6 @@ __marimo__/
 # Data files
 data/
 *.csv
+
+# Docs for AI agents
+AGENTS.md
