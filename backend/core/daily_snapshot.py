@@ -10,6 +10,8 @@ from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
 from backend.core.iol_client import get_prices_for_positions, get_fx_rates
 from backend.core.santander_holdings import SantanderHolding, load_holdings
 from backend.core.santander_nav import fetch_share_values as fetch_santander_nav_values
+from backend.core.crypto_holdings import CryptoHolding, load_holdings as load_crypto_holdings
+from backend.core.crypto_prices import fetch_simple_prices as fetch_crypto_prices
 from backend.valuation.models import (
     Position as PositionModel,
     Price as PriceModel,
@@ -84,6 +86,30 @@ def _manual_positions_df(holdings: list[SantanderHolding]) -> pd.DataFrame:
     return df_manual.reindex(columns=POSITION_COLUMNS)
 
 
+def _crypto_positions_df(holdings: list[CryptoHolding]) -> pd.DataFrame:
+    rows = []
+    for holding in holdings:
+        rows.append(
+            {
+                "symbol": holding["symbol"],
+                "description": holding.get("display_name"),
+                "instrument_type": "crypto",
+                "market": holding["market"],
+                "source": holding["source"],
+                "account_id": holding["account_id"],
+                "currency": holding["currency"],
+                "quantity": holding["quantity"],
+                "price": nan,
+                "valuation": nan,
+            }
+        )
+
+    df_manual = pd.DataFrame(rows)
+    if df_manual.empty:
+        return df_manual
+    return df_manual.reindex(columns=POSITION_COLUMNS)
+
+
 def main():
     if not IOL_USERNAME or not IOL_PASSWORD:
         print("Missing IOL_USERNAME or IOL_PASSWORD in .env")
@@ -117,6 +143,20 @@ def main():
             holdings_by_fund_id.setdefault(holding["fund_id"], []).append(holding)
         if santander_holdings:
             print(f"Loaded {len(santander_holdings)} Santander manual holdings.")
+
+    crypto_holdings = load_crypto_holdings()
+    crypto_symbols: set[str] = set()
+    if crypto_holdings:
+        crypto_df = _crypto_positions_df(crypto_holdings)
+        if not crypto_df.empty:
+            if not df.empty:
+                combined_rows = df.to_dict(orient="records")
+                combined_rows.extend(crypto_df.to_dict(orient="records"))
+                df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+            else:
+                df = crypto_df
+        crypto_symbols = {holding["symbol"] for holding in crypto_holdings}
+        print(f"Loaded {len(crypto_holdings)} crypto manual holdings.")
 
     if df.empty:
         print("No positions found or unexpected API format.")
@@ -204,6 +244,30 @@ def main():
     if santander_price_models:
         prices.extend(santander_price_models)
 
+    crypto_price_models: list[PriceModel] = []
+    if crypto_symbols:
+        try:
+            crypto_price_rows = fetch_crypto_prices(list(crypto_symbols))
+            for row in crypto_price_rows:
+                crypto_price_models.append(
+                    PriceModel(
+                        asof_dt=row["asof_dt"],
+                        asof_ts=row.get("asof_ts"),
+                        symbol=row["symbol"],
+                        price_type="last",
+                        price=row["price"],
+                        currency=row["currency"],
+                        venue=row["venue"],
+                        source=row["source"],
+                        quality_score=row["quality_score"],
+                    )
+                )
+        except Exception as e:
+            print(f"Error fetching crypto prices: {e}")
+
+    if crypto_price_models:
+        prices.extend(crypto_price_models)
+
     if prices:
         try:
             rows = [p.model_dump() for p in prices]
@@ -228,7 +292,7 @@ def main():
         except Exception as e:
             print(f"Error saving prices snapshot: {e}")
     else:
-        print("No prices fetched from IOL or Santander.")
+        print("No prices fetched from IOL, Santander, or crypto sources.")
 
     fx_rates = []
     try:

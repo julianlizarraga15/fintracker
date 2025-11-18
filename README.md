@@ -93,5 +93,12 @@ Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now va
 
 ## Manual crypto holdings (prep for BTC/ETH)
 - To start tracking crypto balances manually, add `data/manual/crypto_holdings.json` (or point `CRYPTO_HOLDINGS_FILE` to another path).
-- Schema per entry: `symbol` (e.g. `"BTC"`), `quantity`, optional `display_name`, `currency` (defaults to USD), `market` (e.g. `"crypto"`), `source` (e.g. `"manual"`), `account_id` (falls back to env-derived account id).
-- The plan is to auto-fetch BTC/ETH prices (CoinGecko simple price) and fold these rows into the daily snapshot; wiring can be enabled next if you want this live in valuations.
+- Schema per entry: `symbol` (e.g. `"BTC"`), `quantity`, optional `display_name`, `currency` (defaults to USD), `market` (e.g. `"crypto"`), `source` (e.g. `"manual"` or the wallet name), `account_id` (falls back to env-derived account id).
+- Example:
+  ```json
+  [
+    { "symbol": "BTC", "quantity": 0.25, "display_name": "BTC (Exodus)", "market": "crypto", "source": "exodus" },
+    { "symbol": "ETH", "quantity": 3.1,  "display_name": "ETH (Binance)", "market": "crypto", "source": "binance" }
+  ]
+  ```
+- BTC/ETH prices are fetched via CoinGecko simple price and folded into the daily snapshot and valuations.

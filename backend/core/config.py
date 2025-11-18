@@ -26,3 +26,8 @@ SANTANDER_HOLDINGS_FILE = os.getenv(
     "SANTANDER_HOLDINGS_FILE",
     os.path.join("data", "manual", "santander_holdings.json"),
 )
+
+CRYPTO_HOLDINGS_FILE = os.getenv(
+    "CRYPTO_HOLDINGS_FILE",
+    os.path.join("data", "manual", "crypto_holdings.json"),
+)
