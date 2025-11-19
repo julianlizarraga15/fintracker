@@ -90,6 +90,10 @@ Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now va
 - Historical views (charts, time series storage beyond CSV/Parquet).
 - Optional S3 uploads for valuations alongside positions/prices/FX snapshots.
 - Alerting around failed valuation runs (CloudWatch or similar).
+- Add JWT auth for the public demo: FastAPI login endpoint that checks env-provided username/password, issues a short-lived JWT signed with `JWT_SECRET`, and enforces `Authorization: Bearer` on protected routes.
+- Wire the frontend to show a login form, call `/api/auth/login`, keep the JWT in memory (or localStorage if you accept the risk), attach it on fetches, and handle 401 by re-prompting.
+- Put Nginx on a public host with DNS + TLS (certbot), proxy `/api` to the backend and `/` to the frontend, and forward the `Authorization` header.
+- Keep secrets and domains out of git; set `JWT_SECRET`, `JWT_EXPIRES_MINUTES`, allowed creds, and the public domain via env/secret store at deploy time.
 
 ## Manual crypto holdings (prep for BTC/ETH)
 - To start tracking crypto balances manually, add `data/manual/crypto_holdings.json` (or point `CRYPTO_HOLDINGS_FILE` to another path).
