@@ -238,6 +238,34 @@
         border-color: rgba(255, 214, 107, 0.5);
       }
 
+      .toggle-button {
+        background: none;
+        border: 1px solid var(--panel-border);
+        color: var(--accent);
+        padding: 4px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        line-height: 1;
+      }
+
+      .details-row {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .details-row table {
+        margin-top: 8px;
+        font-size: 0.9rem;
+      }
+
+      .details-row td {
+        border-bottom: none;
+      }
+
+      .is-hidden {
+        display: none;
+      }
+
       .empty-state {
         text-align: center;
         padding: 40px;
@@ -420,37 +448,113 @@
           return;
         }
 
-        const fragment = document.createDocumentFragment();
+        const groupMap = new Map();
         rows.forEach((row) => {
-          const unitPriceUsd = row.unit_price_base;
-          const quantity = row.quantity;
-          const valueUsd =
-            unitPriceUsd !== null && unitPriceUsd !== undefined && quantity !== null && quantity !== undefined
-              ? unitPriceUsd * quantity
-              : row.value_base;
+          if (!groupMap.has(row.symbol)) groupMap.set(row.symbol, []);
+          groupMap.get(row.symbol).push(row);
+        });
+
+        const groups = Array.from(groupMap.entries()).map(([symbol, symbolRows]) => {
+          const totalQuantity = symbolRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0);
+          const totalValue = symbolRows.reduce((sum, r) => {
+            const unitPrice = r.unit_price_base;
+            const qty = r.quantity;
+            const value =
+              unitPrice !== null && unitPrice !== undefined && qty !== null && qty !== undefined
+                ? unitPrice * qty
+                : r.value_base;
+            return value !== null && value !== undefined ? sum + value : sum;
+          }, 0);
+          const averagePrice = totalQuantity > 0 ? totalValue / totalQuantity : null;
+          return { symbol, rows: symbolRows, totalQuantity, totalValue, averagePrice };
+        });
+
+        groups.sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0));
+
+        const fragment = document.createDocumentFragment();
+        groups.forEach((group, index) => {
+          const toggleId = `details-${index}`;
+          const hasDetails = group.rows.length > 1;
+          const summarySources = Array.from(
+            new Set(group.rows.map((r) => r.source || r.market || "Unknown"))
+          );
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>
-              <div>${row.symbol}</div>
-              <div class="hint mono">${row.asset_type ?? ""}</div>
+              <div>${group.symbol}</div>
+              <div class="hint mono">${group.rows[0]?.asset_type ?? ""}</div>
             </td>
             <td>
-              ${row.source ?? row.market ?? "—"}
+              ${summarySources.join(", ")}
               ${
-                row.status && row.status !== "ok"
-                  ? `<span class="badge" data-tone="warning" style="margin-left: 8px">${row.status}</span>`
+                hasDetails
+                  ? `<button class="toggle-button" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle details">></button>`
                   : ""
               }
             </td>
-            <td class="mono">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
-            <td class="mono">${formatNumber(quantity)}</td>
-            <td class="mono">${formatCurrency(valueUsd, baseCurrency)}</td>
+            <td class="mono">${formatCurrency(group.averagePrice, baseCurrency)}</td>
+            <td class="mono">${formatNumber(group.totalQuantity)}</td>
+            <td class="mono">${formatCurrency(group.totalValue, baseCurrency)}</td>
           `;
           fragment.appendChild(tr);
+
+          if (!hasDetails) {
+            return;
+          }
+
+          const detailRow = document.createElement("tr");
+          detailRow.id = toggleId;
+          detailRow.className = "details-row is-hidden";
+          const detailCell = document.createElement("td");
+          detailCell.colSpan = 5;
+
+          const innerTable = document.createElement("table");
+          innerTable.innerHTML = `
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Unit price (USD)</th>
+                <th>Quantity</th>
+                <th>Value (USD)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${group.rows
+                .map((row) => {
+                  const unitPriceUsd = row.unit_price_base;
+                  const quantity = row.quantity;
+                  const valueUsd =
+                    unitPriceUsd !== null && unitPriceUsd !== undefined && quantity !== null && quantity !== undefined
+                      ? unitPriceUsd * quantity
+                      : row.value_base;
+                  return `
+                    <tr>
+                      <td>${row.source ?? row.market ?? "—"}</td>
+                      <td class="mono">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
+                      <td class="mono">${formatNumber(quantity)}</td>
+                      <td class="mono">${formatCurrency(valueUsd, baseCurrency)}</td>
+                      <td>
+                        ${
+                          row.status
+                            ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>`
+                            : ""
+                        }
+                      </td>
+                    </tr>
+                  `;
+                })
+                .join("")}
+            </tbody>
+          `;
+
+          detailCell.appendChild(innerTable);
+          detailRow.appendChild(detailCell);
+          fragment.appendChild(detailRow);
         });
         dom.rowsBody.replaceChildren(fragment);
-        dom.rowsSummary.textContent = `${rows.length} positions (sorted by USD value).`;
+        dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by USD value).`;
       }
 
       async function loadSnapshot(accountId) {
@@ -524,6 +628,18 @@
           setFeedback("Enter an account id to get started.");
         }
       })();
+
+      dom.rowsBody.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-toggle-details]");
+        if (!button) return;
+        const targetId = button.dataset.toggleDetails;
+        const detailRow = document.getElementById(targetId);
+        if (!detailRow) return;
+        const isHidden = detailRow.classList.contains("is-hidden");
+        detailRow.classList.toggle("is-hidden", !isHidden);
+        button.setAttribute("aria-expanded", String(isHidden));
+        button.textContent = isHidden ? "v" : ">";
+      });
     </script>
   </body>
 </html>
