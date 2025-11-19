@@ -322,16 +322,15 @@
             <thead>
               <tr>
                 <th>Symbol</th>
+                <th>Source</th>
+                <th>Unit price (USD)</th>
                 <th>Quantity</th>
-                <th>Value (base)</th>
-                <th>Unit price (base)</th>
-                <th>Unit price (native)</th>
-                <th>Status</th>
+                <th>Value (USD)</th>
               </tr>
             </thead>
             <tbody id="rows-body">
               <tr>
-                <td colspan="6" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
+                <td colspan="5" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
               </tr>
             </tbody>
           </table>
@@ -416,40 +415,42 @@
       function renderRows(rows, baseCurrency) {
         if (!rows || !rows.length) {
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="6" class="empty-state">No positions in this snapshot.</td></tr>';
+            '<tr><td colspan="5" class="empty-state">No positions in this snapshot.</td></tr>';
           dom.rowsSummary.textContent = "0 positions.";
           return;
         }
 
         const fragment = document.createDocumentFragment();
         rows.forEach((row) => {
+          const unitPriceUsd = row.unit_price_base;
+          const quantity = row.quantity;
+          const valueUsd =
+            unitPriceUsd !== null && unitPriceUsd !== undefined && quantity !== null && quantity !== undefined
+              ? unitPriceUsd * quantity
+              : row.value_base;
+
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>
               <div>${row.symbol}</div>
               <div class="hint mono">${row.asset_type ?? ""}</div>
             </td>
-            <td class="mono">${formatNumber(row.quantity)}</td>
-            <td class="mono">${formatCurrency(row.value_base, baseCurrency)}</td>
-            <td class="mono">${formatCurrency(row.unit_price_base, baseCurrency)}</td>
-            <td class="mono">${formatCurrency(row.unit_price_native, row.unit_price_native_ccy)}</td>
             <td>
+              ${row.source ?? row.market ?? "—"}
               ${
-                row.status
-                  ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>`
-                  : ""
-              }
-              ${
-                row.price_quality_score !== undefined && row.price_quality_score !== null
-                  ? `<span class="hint">score ${row.price_quality_score}</span>`
+                row.status && row.status !== "ok"
+                  ? `<span class="badge" data-tone="warning" style="margin-left: 8px">${row.status}</span>`
                   : ""
               }
             </td>
+            <td class="mono">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
+            <td class="mono">${formatNumber(quantity)}</td>
+            <td class="mono">${formatCurrency(valueUsd, baseCurrency)}</td>
           `;
           fragment.appendChild(tr);
         });
         dom.rowsBody.replaceChildren(fragment);
-        dom.rowsSummary.textContent = `${rows.length} positions (sorted by base value).`;
+        dom.rowsSummary.textContent = `${rows.length} positions (sorted by USD value).`;
       }
 
       async function loadSnapshot(accountId) {
@@ -495,7 +496,7 @@
           }
           setStatus("Error", "error");
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="6" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>';
+            '<tr><td colspan="5" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>';
           dom.rowsSummary.textContent = "Request failed.";
         } finally {
           dom.submitButton.disabled = false;
