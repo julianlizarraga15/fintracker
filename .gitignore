@@ -212,3 +212,6 @@ data/
 
 # Docs for AI agents
 AGENTS.md
+
+# TLS assets deployed to nginx container
+tls/

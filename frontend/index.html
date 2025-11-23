@@ -100,7 +100,8 @@
         flex-wrap: wrap;
       }
 
-      input[type="text"] {
+      input[type="text"],
+      input[type="password"] {
         flex: 1;
         min-width: 200px;
         border-radius: 14px;
@@ -111,7 +112,8 @@
         color: inherit;
       }
 
-      input[type="text"]:focus-visible {
+      input[type="text"]:focus-visible,
+      input[type="password"]:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
@@ -152,6 +154,17 @@
 
       .message[data-tone="error"] {
         color: var(--danger);
+      }
+
+      .auth-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+
+      .login-status {
+        font-size: 0.9rem;
+        color: var(--text-muted);
       }
 
       .message[data-tone="success"] {
@@ -297,6 +310,24 @@
       </section>
 
       <section class="panel">
+        <form id="login-form">
+          <label for="login-username">Demo login</label>
+          <div class="auth-grid">
+            <input id="login-username" type="text" placeholder="Username" autocomplete="username" required />
+            <input
+              id="login-password"
+              type="password"
+              placeholder="Password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="submit" id="login-btn">Log in</button>
+          </div>
+          <p class="login-status" id="login-feedback">Authenticate to fetch valuation snapshots.</p>
+        </form>
+      </section>
+
+      <section class="panel">
         <form id="account-form">
           <label for="account-id">Account ID</label>
           <div class="control">
@@ -383,9 +414,20 @@
         accountInput: document.getElementById("account-id"),
         submitButton: document.getElementById("load-btn"),
         form: document.getElementById("account-form"),
+        loginForm: document.getElementById("login-form"),
+        loginFeedback: document.getElementById("login-feedback"),
+        loginButton: document.getElementById("login-btn"),
+        loginUsername: document.getElementById("login-username"),
+        loginPassword: document.getElementById("login-password"),
       };
 
       const STORAGE_KEY = "fintracker.accountId";
+      const REQUEST_TIMEOUT_MS = 30_000;
+
+      const authState = {
+        token: null,
+        expiresAt: 0,
+      };
 
       function setStatus(text, state = "idle") {
         dom.statusChip.textContent = text;
@@ -399,6 +441,69 @@
         } else {
           delete dom.feedback.dataset.tone;
         }
+      }
+
+      function setLoginFeedback(message = "", tone = "") {
+        dom.loginFeedback.textContent = message;
+        if (tone) {
+          dom.loginFeedback.dataset.tone = tone;
+        } else {
+          delete dom.loginFeedback.dataset.tone;
+        }
+      }
+
+      function hasValidToken() {
+        return Boolean(authState.token && authState.expiresAt > Date.now());
+      }
+
+      function clearAuthState(message) {
+        authState.token = null;
+        authState.expiresAt = 0;
+        if (message) {
+          setLoginFeedback(message, "error");
+        }
+        dom.loginPassword.value = "";
+      }
+
+      async function authenticate(username, password) {
+        dom.loginButton.disabled = true;
+        setLoginFeedback("Authenticating…");
+        try {
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const detail = payload && payload.detail;
+            throw new Error(detail || "Login failed.");
+          }
+          authState.token = payload.access_token;
+          const expiresInSeconds = Number(payload.expires_in) || 0;
+          authState.expiresAt = Date.now() + expiresInSeconds * 1000;
+          setLoginFeedback("Authenticated. Token stored in memory.", "success");
+          setStatus("Authenticated", "ready");
+          if (dom.accountInput.value.trim()) {
+            loadSnapshot(dom.accountInput.value.trim());
+          }
+        } catch (error) {
+          clearAuthState();
+          setStatus("Auth failed", "error");
+          setLoginFeedback(error.message || "Failed to authenticate.", "error");
+          dom.loginUsername.focus();
+        } finally {
+          dom.loginButton.disabled = false;
+        }
+      }
+
+      function ensureAuthenticated() {
+        if (hasValidToken()) {
+          return true;
+        }
+        clearAuthState("Session missing or expired. Log in to continue.");
+        dom.loginUsername.focus();
+        return false;
       }
 
       function formatDate(value) {
@@ -557,9 +662,22 @@
         dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by USD value).`;
       }
 
+      function authHeaders() {
+        return hasValidToken() ? { Authorization: `Bearer ${authState.token}` } : {};
+      }
+
+      function handleUnauthorized() {
+        clearAuthState("Session expired. Please log in again.");
+        setStatus("Auth required", "error");
+      }
+
       async function loadSnapshot(accountId) {
+        if (!ensureAuthenticated()) {
+          setFeedback("Please log in before loading a snapshot.", "error");
+          return;
+        }
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         setStatus("Loading…", "loading");
         setFeedback("Fetching snapshot…");
         dom.submitButton.disabled = true;
@@ -567,10 +685,13 @@
         try {
           const response = await fetch(
             `/api/valuations/latest?account_id=${encodeURIComponent(accountId.trim())}`,
-            { signal: controller.signal }
+            { signal: controller.signal, headers: authHeaders() }
           );
 
           if (!response.ok) {
+            if (response.status === 401) {
+              handleUnauthorized();
+            }
             const detail = await response.json().catch(() => ({}));
             throw new Error(detail.detail || `Request failed with status ${response.status}`);
           }
@@ -618,14 +739,24 @@
         loadSnapshot(accountId);
       });
 
+      dom.loginForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const username = dom.loginUsername.value.trim();
+        const password = dom.loginPassword.value;
+        if (!username || !password) {
+          setLoginFeedback("Enter both username and password.", "error");
+          return;
+        }
+        authenticate(username, password);
+      });
+
       (function bootstrap() {
         const savedAccount = localStorage.getItem(STORAGE_KEY);
         if (savedAccount) {
           dom.accountInput.value = savedAccount;
-          setFeedback("Using last account id from this browser.");
-          loadSnapshot(savedAccount);
+          setFeedback("Account id restored. Log in and load the snapshot when ready.");
         } else {
-          setFeedback("Enter an account id to get started.");
+          setFeedback("Log in, then enter an account id to get started.");
         }
       })();
 

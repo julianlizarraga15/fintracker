@@ -3,7 +3,7 @@
 Personal finance tracker for pulling brokerage positions, computing valuations, and surfacing them through containerized services.
 
 ## Architecture
-- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.daily_snapshot`. The API exposes `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
+- **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.daily_snapshot`. The API exposes `POST /auth/login` (JWT issuance backed by env-provided demo credentials) plus `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
 - **Frontend (`frontend/`)**: Static site served through Nginx that queries `/api/valuations/latest` and renders the latest snapshot (status chip, totals, grouped-by-symbol positions with per-custodian details) for a provided account id.
 - **Docker Compose (`docker-compose.yml`)**: Builds/runs backend, frontend, and Nginx reverse proxy with stable container names (e.g., `fintracker-backend`).
 - **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to load `.env` (when present) and run the snapshot job.
@@ -82,7 +82,21 @@ Systemd units (not checked into the repo) live at:
 - `/etc/systemd/system/valuations.service` – runs `docker exec fintracker-backend /app/scripts/run_valuations.sh` as a oneshot job and depends on `docker.service`.
 - `/etc/systemd/system/valuations.timer` – `OnCalendar=*-*-* 16:00:00`, `Persistent=true`, `Unit=valuations.service`.
 
-Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now valuations.timer`. Logs: `journalctl -u valuations.service`.
+   Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now valuations.timer`. Logs: `journalctl -u valuations.service`.
+
+## Public Demo Auth + TLS
+- **Configure secrets via env/secret store**: set `DEMO_AUTH_USERNAME`, `DEMO_AUTH_PASSWORD`, `JWT_SECRET`, and optionally override `JWT_EXPIRES_MINUTES` before the backend container boots. Keep these out of git and rotate `JWT_SECRET` if compromised.
+- **Frontend auth flow**: the SPA now shows a login form, calls `/api/auth/login`, keeps the JWT in memory, attaches it to `/api/valuations/latest` fetches, and clears it on any `401` so the user is prompted to log back in.
+- **Nginx with TLS**: the `nginx` service listens on `80` (HTTP) and `443` (HTTPS). Port 80 only redirects to HTTPS. Place your Let’s Encrypt certs/keys under `./tls` (ignored by git) so they mount at `/etc/nginx/tls/` and keep the actual domain (e.g., `$PUBLIC_DOMAIN`) outside of the repo. A typical host setup:
+  ```bash
+  export PUBLIC_DOMAIN=demo.example.com
+  sudo certbot certonly --standalone -d "$PUBLIC_DOMAIN"
+  sudo mkdir -p tls
+  sudo cp /etc/letsencrypt/live/"$PUBLIC_DOMAIN"/fullchain.pem tls/
+  sudo cp /etc/letsencrypt/live/"$PUBLIC_DOMAIN"/privkey.pem tls/
+  docker compose up -d nginx
+  ```
+  `nginx.conf` forwards `Authorization: Bearer ...` headers on `/api/` so the backend can verify JWTs.
 
 ## Roadmap / Next Steps
 - Frontend polish: filters, sortable columns, and lightweight charts on top of the existing snapshot view.
