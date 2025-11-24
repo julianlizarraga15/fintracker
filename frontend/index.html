@@ -303,7 +303,6 @@
         <div class="app__header">
           <div>
             <h1>Fintracker</h1>
-            <p class="subtitle">Fetch latest valuation snapshots straight from the backend.</p>
           </div>
           <div class="status-chip" id="status-chip" data-state="idle">Idle</div>
         </div>
@@ -323,7 +322,7 @@
             />
             <button type="submit" id="login-btn">Log in</button>
           </div>
-          <p class="login-status" id="login-feedback">Authenticate to fetch valuation snapshots.</p>
+          <p class="login-status" id="login-feedback">Sign in to load valuation snapshots.</p>
         </form>
       </section>
 
@@ -334,7 +333,7 @@
             <input id="account-id" name="account" type="text" placeholder="e.g. 8e9d4d54f0b7" required />
             <button type="submit" id="load-btn">Load snapshot</button>
           </div>
-          <p class="hint">Use the partition id from <code>data/positions/valuations/dt=*/account=&lt;id&gt;</code>.</p>
+          <p class="hint">Enter an account id to load its snapshot.</p>
           <div class="message" id="feedback" role="status" aria-live="polite"></div>
         </form>
 
@@ -350,10 +349,6 @@
           <div>
             <span class="label">Account</span>
             <div class="value-large mono" id="account-label">—</div>
-          </div>
-          <div>
-            <span class="label">Source file</span>
-            <div class="mono" id="source-file">—</div>
           </div>
         </div>
 
@@ -404,7 +399,6 @@
         snapshotDate: document.getElementById("snapshot-date"),
         computedTs: document.getElementById("computed-ts"),
         accountLabel: document.getElementById("account-label"),
-        sourceFile: document.getElementById("source-file"),
         totalValue: document.getElementById("total-value"),
         baseCurrency: document.getElementById("base-currency"),
         positionsCount: document.getElementById("positions-count"),
@@ -482,7 +476,7 @@
           authState.token = payload.access_token;
           const expiresInSeconds = Number(payload.expires_in) || 0;
           authState.expiresAt = Date.now() + expiresInSeconds * 1000;
-          setLoginFeedback("Authenticated. Token stored in memory.", "success");
+          setLoginFeedback("Authenticated.", "success");
           setStatus("Authenticated", "ready");
           if (dom.accountInput.value.trim()) {
             loadSnapshot(dom.accountInput.value.trim());
@@ -700,7 +694,6 @@
           dom.snapshotDate.textContent = formatDate(payload.snapshot_dt);
           dom.computedTs.textContent = formatDateTime(payload.computed_ts);
           dom.accountLabel.textContent = payload.account_id;
-          dom.sourceFile.textContent = payload.source_file;
           dom.totalValue.textContent = formatCurrency(
             payload.totals?.total_value_base,
             payload.base_currency || payload.totals?.base_currency
@@ -710,7 +703,7 @@
           dom.okPositions.textContent = `OK positions ${payload.totals?.ok_positions ?? "—"}`;
 
           renderRows(payload.rows, payload.base_currency);
-          setStatus("Fresh snapshot", "ready");
+          setStatus("Snapshot ready", "ready");
           setFeedback(`Snapshot loaded for account ${payload.account_id}.`, "success");
           localStorage.setItem(STORAGE_KEY, accountId.trim());
         } catch (error) {
