@@ -16,6 +16,7 @@ class SnapshotNotFound(RuntimeError):
 SNAPSHOTS_ROOT = Path(os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions"))
 VALUATIONS_DIR = SNAPSHOTS_ROOT / "valuations"
 BASE_CURRENCY = os.getenv("VALUATIONS_BASE_CURRENCY", "USD")
+PORTFOLIO_PCT_SCALE = 100.0
 
 
 def _latest_dt_dirs(base_dir: Path):
@@ -93,6 +94,14 @@ def _parse_datetime(value) -> datetime:
     raise SnapshotNotFound("computed_ts missing in valuation file.")
 
 
+def _compute_portfolio_share(value_base: Optional[float], total_value_base: Optional[float]) -> Optional[float]:
+    if value_base is None or total_value_base is None:
+        return None
+    if total_value_base <= 0:
+        return None
+    return (value_base / total_value_base) * PORTFOLIO_PCT_SCALE
+
+
 class ValuationRow(BaseModel):
     symbol: str
     quantity: float
@@ -109,6 +118,7 @@ class ValuationRow(BaseModel):
     price_source: Optional[str] = None
     price_quality_score: Optional[int] = Field(None, ge=0, le=100)
     fx_source: Optional[str] = None
+    portfolio_share_pct: Optional[float] = None
 
 
 class ValuationTotals(BaseModel):
@@ -128,17 +138,18 @@ class LatestValuationResponse(BaseModel):
     source_file: str
 
 
-def _build_rows(df: pd.DataFrame) -> list[ValuationRow]:
+def _build_rows(df: pd.DataFrame, total_value_base: Optional[float]) -> list[ValuationRow]:
     rows: list[ValuationRow] = []
     for record in df.to_dict(orient="records"):
         symbol = record.get("symbol") or record.get("raw_symbol")
         if not symbol:
             continue
+        value_base = _safe_float(record.get("value_base"))
         rows.append(
             ValuationRow(
                 symbol=symbol,
                 quantity=_safe_float(record.get("quantity")) or 0.0,
-                value_base=_safe_float(record.get("value_base")),
+                value_base=value_base,
                 unit_price_base=_safe_float(record.get("unit_price_base")),
                 unit_price_native=_safe_float(record.get("unit_price_native")),
                 unit_price_native_ccy=record.get("unit_price_native_ccy"),
@@ -151,6 +162,7 @@ def _build_rows(df: pd.DataFrame) -> list[ValuationRow]:
                 price_source=record.get("price_source"),
                 price_quality_score=_safe_int(record.get("price_quality_score")),
                 fx_source=record.get("fx_source"),
+                portfolio_share_pct=_compute_portfolio_share(value_base, total_value_base),
             )
         )
     rows.sort(key=lambda row: (row.value_base or float("-inf")), reverse=True)
@@ -178,7 +190,7 @@ def get_latest_valuation_snapshot(account_id: str) -> LatestValuationResponse:
                 ok_positions=int((df["status"] == "ok").sum()) if "status" in df else 0,
                 total_value_base=_safe_float(pd.to_numeric(df["value_base"], errors="coerce").sum()) if "value_base" in df else None,
             )
-            rows = _build_rows(df)
+            rows = _build_rows(df, totals.total_value_base)
             return LatestValuationResponse(
                 snapshot_dt=snapshot_dt,
                 computed_ts=computed_ts,

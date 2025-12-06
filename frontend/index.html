@@ -380,11 +380,12 @@
                 <th>Unit price (USD)</th>
                 <th>Quantity</th>
                 <th>Value (USD)</th>
+                <th>% of portfolio</th>
               </tr>
             </thead>
             <tbody id="rows-body">
               <tr>
-                <td colspan="5" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
+                <td colspan="6" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
               </tr>
             </tbody>
           </table>
@@ -417,6 +418,7 @@
 
       const STORAGE_KEY = "fintracker.accountId";
       const REQUEST_TIMEOUT_MS = 30_000;
+      const PERCENT_SCALE = 100;
 
       const authState = {
         token: null,
@@ -549,13 +551,26 @@
         }
       }
 
-      function renderRows(rows, baseCurrency) {
+      function formatPercent(value, fractionDigits = 2) {
+        if (value === null || value === undefined || Number.isNaN(value)) return "—";
+        return `${formatNumber(value, {
+          minimumFractionDigits: fractionDigits,
+          maximumFractionDigits: fractionDigits,
+        })}%`;
+      }
+
+      function renderRows(rows, baseCurrency, totalPortfolioValue) {
         if (!rows || !rows.length) {
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="5" class="empty-state">No positions in this snapshot.</td></tr>';
+            '<tr><td colspan="6" class="empty-state">No positions in this snapshot.</td></tr>';
           dom.rowsSummary.textContent = "0 positions.";
           return;
         }
+
+        const portfolioTotal =
+          typeof totalPortfolioValue === "number" && Number.isFinite(totalPortfolioValue)
+            ? totalPortfolioValue
+            : null;
 
         const groupMap = new Map();
         rows.forEach((row) => {
@@ -566,16 +581,21 @@
         const groups = Array.from(groupMap.entries()).map(([symbol, symbolRows]) => {
           const totalQuantity = symbolRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0);
           const totalValue = symbolRows.reduce((sum, r) => {
-            const unitPrice = r.unit_price_base;
-            const qty = r.quantity;
             const value =
-              unitPrice !== null && unitPrice !== undefined && qty !== null && qty !== undefined
-                ? unitPrice * qty
-                : r.value_base;
+              r.value_base !== null && r.value_base !== undefined
+                ? r.value_base
+                : r.unit_price_base !== null &&
+                  r.unit_price_base !== undefined &&
+                  r.quantity !== null &&
+                  r.quantity !== undefined
+                ? r.unit_price_base * r.quantity
+                : null;
             return value !== null && value !== undefined ? sum + value : sum;
           }, 0);
           const averagePrice = totalQuantity > 0 ? totalValue / totalQuantity : null;
-          return { symbol, rows: symbolRows, totalQuantity, totalValue, averagePrice };
+          const percentOfPortfolio =
+            portfolioTotal && portfolioTotal > 0 ? (totalValue / portfolioTotal) * PERCENT_SCALE : null;
+          return { symbol, rows: symbolRows, totalQuantity, totalValue, averagePrice, percentOfPortfolio };
         });
 
         groups.sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0));
@@ -605,6 +625,7 @@
             <td class="mono">${formatCurrency(group.averagePrice, baseCurrency)}</td>
             <td class="mono">${formatNumber(group.totalQuantity)}</td>
             <td class="mono">${formatCurrency(group.totalValue, baseCurrency)}</td>
+            <td class="mono">${formatPercent(group.percentOfPortfolio)}</td>
           `;
           fragment.appendChild(tr);
 
@@ -616,7 +637,7 @@
           detailRow.id = toggleId;
           detailRow.className = "details-row is-hidden";
           const detailCell = document.createElement("td");
-          detailCell.colSpan = 5;
+          detailCell.colSpan = 6;
 
           const innerTable = document.createElement("table");
           innerTable.innerHTML = `
@@ -626,6 +647,7 @@
                 <th>Unit price (USD)</th>
                 <th>Quantity</th>
                 <th>Value (USD)</th>
+                <th>% of portfolio</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -635,15 +657,21 @@
                   const unitPriceUsd = row.unit_price_base;
                   const quantity = row.quantity;
                   const valueUsd =
-                    unitPriceUsd !== null && unitPriceUsd !== undefined && quantity !== null && quantity !== undefined
+                    row.value_base !== null && row.value_base !== undefined
+                      ? row.value_base
+                      : unitPriceUsd !== null &&
+                        unitPriceUsd !== undefined &&
+                        quantity !== null &&
+                        quantity !== undefined
                       ? unitPriceUsd * quantity
-                      : row.value_base;
+                      : null;
                   return `
                     <tr>
                       <td>${row.source ?? row.market ?? "—"}</td>
                       <td class="mono">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
                       <td class="mono">${formatNumber(quantity)}</td>
                       <td class="mono">${formatCurrency(valueUsd, baseCurrency)}</td>
+                      <td class="mono">${formatPercent(row.portfolio_share_pct)}</td>
                       <td>
                         ${
                           row.status
@@ -712,7 +740,7 @@
           dom.positionsCount.textContent = payload.totals?.positions ?? "—";
           dom.okPositions.textContent = `OK positions ${payload.totals?.ok_positions ?? "—"}`;
 
-          renderRows(payload.rows, payload.base_currency);
+          renderRows(payload.rows, payload.base_currency, payload.totals?.total_value_base);
           setStatus("Snapshot ready", "ready");
           setFeedback(`Snapshot loaded for account ${payload.account_id}.`, "success");
           localStorage.setItem(STORAGE_KEY, accountId.trim());
@@ -724,7 +752,7 @@
           }
           setStatus("Error", "error");
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="5" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>';
+            '<tr><td colspan="6" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>';
           dom.rowsSummary.textContent = "Request failed.";
         } finally {
           dom.submitButton.disabled = false;

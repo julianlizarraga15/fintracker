@@ -67,6 +67,8 @@ def test_get_latest_valuation_snapshot_builds_response(tmp_path, monkeypatch):
     assert [row.symbol for row in response.rows] == ["AAPL", "BOND1"]
     assert response.rows[0].price_quality_score == 90
     assert response.rows[1].status == "stale"
+    assert response.rows[0].portfolio_share_pct == pytest.approx(65.22495, rel=1e-3)
+    assert response.rows[1].portfolio_share_pct == pytest.approx(34.77505, rel=1e-3)
     assert response.source_file.endswith(".csv")
 
 
