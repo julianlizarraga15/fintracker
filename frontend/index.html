@@ -478,8 +478,18 @@
           authState.expiresAt = Date.now() + expiresInSeconds * 1000;
           setLoginFeedback("Authenticated.", "success");
           setStatus("Authenticated", "ready");
-          if (dom.accountInput.value.trim()) {
-            loadSnapshot(dom.accountInput.value.trim());
+          const detectedAccountId = (payload.account_id || "").trim();
+          let accountIdToLoad = dom.accountInput.value.trim();
+          if (!accountIdToLoad && detectedAccountId) {
+            dom.accountInput.value = detectedAccountId;
+            localStorage.setItem(STORAGE_KEY, detectedAccountId);
+            setFeedback("Detected account id from login. Loading snapshot…", "success");
+            accountIdToLoad = detectedAccountId;
+          }
+          if (accountIdToLoad) {
+            loadSnapshot(accountIdToLoad);
+          } else {
+            setFeedback("Authenticated. Enter an account id to load a snapshot.");
           }
         } catch (error) {
           clearAuthState();

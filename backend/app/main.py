@@ -1,6 +1,7 @@
 import hmac
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -40,6 +41,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    account_id: Optional[str] = None
 
 
 def _ensure_auth_configured() -> None:
@@ -53,6 +55,14 @@ def _issue_token(subject: str) -> str:
     expiration = datetime.utcnow() + timedelta(minutes=JWT_EXPIRES_MINUTES)
     payload = {"sub": subject, "exp": expiration, "iat": datetime.utcnow()}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _detect_account_id() -> Optional[str]:
+    try:
+        from backend.core.config import ACCOUNT_ID  # type: ignore
+    except Exception:
+        return None
+    return ACCOUNT_ID
 
 
 def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(_auth_scheme)) -> dict:
@@ -81,7 +91,11 @@ def login(payload: LoginRequest):
     password_valid = hmac.compare_digest(payload.password, DEMO_AUTH_PASSWORD)
     if not (username_valid and password_valid):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
-    return LoginResponse(access_token=_issue_token(payload.username), expires_in=JWT_EXPIRES_SECONDS)
+    return LoginResponse(
+        access_token=_issue_token(payload.username),
+        expires_in=JWT_EXPIRES_SECONDS,
+        account_id=_detect_account_id(),
+    )
 
 
 @app.get("/valuations/latest", response_model=LatestValuationResponse)
