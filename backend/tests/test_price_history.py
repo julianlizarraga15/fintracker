@@ -16,8 +16,10 @@ def _write_prices(prices_dir: Path, dt_value: date, rows: list[dict]) -> None:
     df.to_csv(dt_dir / f"prices_{dt_value.isoformat()}.csv", index=False)
 
 
-def _write_fx(fx_dir: Path, dt_value: date, rows: list[dict]) -> None:
+def _write_fx(fx_dir: Path, dt_value: date, rows: list[dict], nested: bool = False) -> None:
     dt_dir = fx_dir / f"dt={dt_value.isoformat()}"
+    if nested:
+        dt_dir = dt_dir / "source=test"
     dt_dir.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows)
     df.to_csv(dt_dir / f"fx_{dt_value.isoformat()}.csv", index=False)
@@ -135,3 +137,40 @@ def test_price_history_handles_missing_fx_and_caps_window(tmp_path, monkeypatch)
     assert response.points == 1
     assert response.missing_fx is True
     assert response.prices[0].price_base is None
+
+
+def test_price_history_reads_nested_fx(tmp_path, monkeypatch):
+    prices_history.clear_cache()
+    prices_dir = tmp_path / "prices"
+    fx_dir = tmp_path / "fx"
+    today = date.today()
+
+    _write_prices(
+        prices_dir,
+        today,
+        [
+          {
+              "asof_dt": today.isoformat(),
+              "symbol": "ARSX",
+              "price": 1000.0,
+              "currency": "ARS",
+          }
+        ],
+    )
+
+    _write_fx(
+        fx_dir,
+        today,
+        [
+            {"asof_dt": today.isoformat(), "from_ccy": "USD", "to_ccy": "ARS", "rate": 1000.0, "max_age_days": 5},
+        ],
+        nested=True,
+    )
+
+    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
+    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
+
+    response = prices_history.get_price_history("ARSX", days=3, base_currency="USD")
+    assert response.points == 1
+    assert response.missing_fx is False
+    assert response.prices[0].price_base == pytest.approx(1.0)

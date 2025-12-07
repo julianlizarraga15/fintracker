@@ -104,6 +104,13 @@ def _pick_snapshot_file(dt_dir: Path, prefix: str) -> Optional[Path]:
     return None
 
 
+def _collect_snapshot_files(dt_dir: Path, prefix: str) -> list[Path]:
+    parquet_files = sorted(dt_dir.rglob(f"{prefix}*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if parquet_files:
+        return parquet_files
+    return sorted(dt_dir.rglob(f"{prefix}*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
 def _read_snapshot(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
 
@@ -132,13 +139,14 @@ def _load_fx_rows(earliest_needed: date) -> list[dict]:
     for dt_value, dt_path in _latest_dt_dirs(FX_DIR):
         if dt_value < earliest_needed:
             break
-        file_path = _pick_snapshot_file(dt_path, "fx_")
-        if not file_path:
+        files = _collect_snapshot_files(dt_path, "fx_")
+        if not files:
             continue
-        df = _read_snapshot(file_path)
-        if df.empty:
-            continue
-        rows.extend(df.to_dict(orient="records"))
+        for file_path in files:
+            df = _read_snapshot(file_path)
+            if df.empty:
+                continue
+            rows.extend(df.to_dict(orient="records"))
     return rows
 
 
