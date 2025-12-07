@@ -285,6 +285,143 @@
         color: var(--text-muted);
       }
 
+      .sparkline {
+        width: 120px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        gap: 4px;
+      }
+
+      .sparkline svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .sparkline__line {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      .sparkline__area {
+        fill: rgba(114, 228, 255, 0.15);
+        stroke: none;
+      }
+
+      .sparkline__placeholder {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .sparkline--interactive {
+        cursor: pointer;
+      }
+
+      .sparkline--muted {
+        opacity: 0.65;
+      }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.55);
+      }
+
+      .modal.is-hidden {
+        display: none;
+      }
+
+      .modal__dialog {
+        width: min(92vw, 820px);
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 25px 70px rgba(0, 0, 0, 0.45);
+      }
+
+      .modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .modal__title {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+
+      .modal__subtitle {
+        color: var(--text-muted);
+        margin-top: 4px;
+        font-size: 0.95rem;
+      }
+
+      .modal__body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .modal__chart {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .modal__chart svg {
+        width: 100%;
+        height: 200px;
+      }
+
+      .modal__meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .modal__sources {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+
+      .modal__alert {
+        color: var(--danger);
+        font-size: 0.9rem;
+        display: none;
+      }
+
+      .modal__alert.is-visible {
+        display: block;
+      }
+
+      .modal__close {
+        background: none;
+        color: inherit;
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+
+      .modal__close:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
       @media (max-width: 700px) {
         .app__header {
           flex-direction: column;
@@ -376,6 +513,7 @@
             <thead>
               <tr>
                 <th>Symbol</th>
+                <th>Trend</th>
                 <th>Source</th>
                 <th>Unit price (USD)</th>
                 <th>Quantity</th>
@@ -385,13 +523,42 @@
             </thead>
             <tbody id="rows-body">
               <tr>
-                <td colspan="6" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
+                <td colspan="7" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
     </main>
+
+    <div class="modal is-hidden" id="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h3 class="modal__title" id="history-modal-title">Price history</h3>
+            <div class="modal__subtitle" id="history-modal-subtitle">Select a symbol to view details.</div>
+          </div>
+          <button type="button" class="modal__close" id="history-modal-close" aria-label="Close price history">
+            ×
+          </button>
+        </div>
+        <div class="modal__body">
+          <div class="modal__alert" id="history-modal-alert">FX missing for some points.</div>
+          <div class="modal__chart" id="history-modal-chart">
+            <div class="sparkline__placeholder">Select a sparkline to view a larger chart.</div>
+          </div>
+          <div class="modal__meta">
+            <div>
+              <span class="label">Sources</span>
+              <div class="modal__sources" id="history-modal-sources">—</div>
+            </div>
+            <div class="modal__actions">
+              <button type="button" class="toggle-button" id="history-modal-toggle">Show native currency</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script>
       const dom = {
@@ -414,11 +581,28 @@
         loginButton: document.getElementById("login-btn"),
         loginUsername: document.getElementById("login-username"),
         loginPassword: document.getElementById("login-password"),
+        historyModal: document.getElementById("history-modal"),
+        historyModalTitle: document.getElementById("history-modal-title"),
+        historyModalSubtitle: document.getElementById("history-modal-subtitle"),
+        historyModalAlert: document.getElementById("history-modal-alert"),
+        historyModalChart: document.getElementById("history-modal-chart"),
+        historyModalSources: document.getElementById("history-modal-sources"),
+        historyModalToggle: document.getElementById("history-modal-toggle"),
+        historyModalClose: document.getElementById("history-modal-close"),
       };
 
       const STORAGE_KEY = "fintracker.accountId";
       const REQUEST_TIMEOUT_MS = 30_000;
       const PERCENT_SCALE = 100;
+      const TABLE_COLUMN_COUNT = 7;
+      const PRICE_HISTORY_WINDOW_DAYS = 30;
+      const SPARKLINE_WIDTH = 120;
+      const SPARKLINE_HEIGHT = 36;
+      const DETAIL_CHART_WIDTH = 760;
+      const DETAIL_CHART_HEIGHT = 200;
+      const priceHistoryCache = new Map();
+      const chartState = { mode: "base", symbol: null, history: null };
+      let lastBaseCurrency = "";
 
       const authState = {
         token: null,
@@ -455,6 +639,8 @@
       function clearAuthState(message) {
         authState.token = null;
         authState.expiresAt = 0;
+        priceHistoryCache.clear();
+        lastBaseCurrency = "";
         if (message) {
           setLoginFeedback(message, "error");
         }
@@ -559,10 +745,146 @@
         })}%`;
       }
 
+      function renderSparklinePlaceholder(container, text, muted = false) {
+        if (!container) return;
+        container.classList.toggle("sparkline--muted", muted);
+        container.classList.remove("sparkline--interactive");
+        container.innerHTML = `<span class="sparkline__placeholder">${text}</span>`;
+      }
+
+      function valuesForHistory(history, useBaseCurrency = true) {
+        if (!history || !Array.isArray(history.prices)) {
+          return { values: [], dates: [] };
+        }
+        const base = (history.base_currency || lastBaseCurrency || "").toUpperCase();
+        const values = [];
+        const dates = [];
+        history.prices.forEach((point) => {
+          const priceBase = point.price_base;
+          const currency = (point.currency || "").toUpperCase();
+          const value =
+            useBaseCurrency && priceBase !== null && priceBase !== undefined
+              ? priceBase
+              : !useBaseCurrency
+              ? point.price
+              : currency === base
+              ? point.price
+              : null;
+          if (value === null || value === undefined || Number.isNaN(value)) {
+            return;
+          }
+          values.push(Number(value));
+          dates.push(point.asof_dt || point.asof_ts || "");
+        });
+        return { values, dates };
+      }
+
+      function buildSparkline(values, width = SPARKLINE_WIDTH, height = SPARKLINE_HEIGHT) {
+        if (!values.length) return null;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const range = max - min || 1;
+        const step = values.length > 1 ? width / (values.length - 1) : width;
+        const points = values.map((val, idx) => {
+          const x = idx * step;
+          const y = height - ((val - min) / range) * height;
+          return { x, y };
+        });
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        const area = document.createElementNS(svg.namespaceURI, "path");
+        const areaPath = [
+          `M 0 ${height}`,
+          ...points.map((p) => `L ${p.x} ${p.y}`),
+          `L ${points[points.length - 1].x} ${height}`,
+          "Z",
+        ].join(" ");
+        area.setAttribute("d", areaPath);
+        area.setAttribute("class", "sparkline__area");
+        const path = document.createElementNS(svg.namespaceURI, "path");
+        path.setAttribute("d", `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`);
+        path.setAttribute("class", "sparkline__line");
+        svg.append(area, path);
+        return svg;
+      }
+
+      async function fetchPriceHistory(symbol, baseCurrency, windowDays = PRICE_HISTORY_WINDOW_DAYS) {
+        const normalizedSymbol = (symbol || "").trim();
+        if (!normalizedSymbol) {
+          throw new Error("Symbol is required.");
+        }
+        const cacheKey = `${normalizedSymbol}:${(baseCurrency || "").toUpperCase()}:${windowDays}`;
+        if (priceHistoryCache.has(cacheKey)) {
+          return priceHistoryCache.get(cacheKey);
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        const fetchPromise = fetch(
+          `/api/prices/history?symbol=${encodeURIComponent(normalizedSymbol)}&days=${windowDays}${
+            baseCurrency ? `&base_currency=${encodeURIComponent(baseCurrency)}` : ""
+          }`,
+          { headers: authHeaders(), signal: controller.signal }
+        )
+          .then(async (response) => {
+            if (!response.ok) {
+              if (response.status === 401) {
+                handleUnauthorized();
+              }
+              const detail = await response.json().catch(() => ({}));
+              throw new Error(detail.detail || `History request failed with status ${response.status}`);
+            }
+            return response.json();
+          })
+          .finally(() => clearTimeout(timeout))
+          .catch((error) => {
+            priceHistoryCache.delete(cacheKey);
+            throw error;
+          });
+        priceHistoryCache.set(cacheKey, fetchPromise);
+        return fetchPromise;
+      }
+
+      async function renderSparklines(baseCurrency) {
+        if (!ensureAuthenticated()) return;
+        const elements = Array.from(dom.rowsBody.querySelectorAll("[data-sparkline-symbol]"));
+        if (!elements.length) return;
+        const jobs = elements.map(async (el) => {
+          const symbol = el.dataset.sparklineSymbol;
+          if (!symbol) return;
+          renderSparklinePlaceholder(el, "Loading…", true);
+          try {
+            const history = await fetchPriceHistory(symbol, baseCurrency);
+            if (!history || history.missing_fx) {
+              renderSparklinePlaceholder(el, history && history.missing_fx ? "FX missing" : "No history", true);
+              return;
+            }
+            const series = valuesForHistory(history, true).values;
+            if (!series || series.length < 2) {
+              renderSparklinePlaceholder(el, "No history", true);
+              return;
+            }
+            const svg = buildSparkline(series);
+            if (svg) {
+              el.innerHTML = "";
+              el.appendChild(svg);
+              el.classList.add("sparkline--interactive");
+              el.title = `${history.window_days}-day price trend`;
+            } else {
+              renderSparklinePlaceholder(el, "No chart", true);
+            }
+          } catch (error) {
+            renderSparklinePlaceholder(el, "—", true);
+            el.title = error.message || "Failed to load history.";
+          }
+        });
+        await Promise.allSettled(jobs);
+      }
+
       function renderRows(rows, baseCurrency, totalPortfolioValue) {
         if (!rows || !rows.length) {
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="6" class="empty-state">No positions in this snapshot.</td></tr>';
+            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">No positions in this snapshot.</td></tr>`;
           dom.rowsSummary.textContent = "0 positions.";
           return;
         }
@@ -615,6 +937,11 @@
               <div class="hint mono">${group.rows[0]?.asset_type ?? ""}</div>
             </td>
             <td>
+              <div class="sparkline sparkline--muted" data-sparkline-symbol="${group.symbol}">
+                <span class="sparkline__placeholder">Loading…</span>
+              </div>
+            </td>
+            <td>
               ${summarySources.join(", ")}
               ${
                 hasDetails
@@ -637,7 +964,7 @@
           detailRow.id = toggleId;
           detailRow.className = "details-row is-hidden";
           const detailCell = document.createElement("td");
-          detailCell.colSpan = 6;
+          detailCell.colSpan = TABLE_COLUMN_COUNT;
 
           const innerTable = document.createElement("table");
           innerTable.innerHTML = `
@@ -691,7 +1018,89 @@
           fragment.appendChild(detailRow);
         });
         dom.rowsBody.replaceChildren(fragment);
-        dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by USD value).`;
+        const summaryCurrency = baseCurrency || "base";
+        dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by ${summaryCurrency} value).`;
+      }
+
+      function renderHistoryModal() {
+        const history = chartState.history;
+        if (!history) return;
+        const baseLabel = (history.base_currency || lastBaseCurrency || "").toUpperCase() || "BASE";
+        const baseRequested = chartState.mode === "base";
+        const useBase = baseRequested && !history.missing_fx;
+        const series = valuesForHistory(history, useBase);
+        const change =
+          series.values.length >= 2 && series.values[0] !== 0
+            ? ((series.values[series.values.length - 1] - series.values[0]) / series.values[0]) * PERCENT_SCALE
+            : null;
+
+        dom.historyModalTitle.textContent = `${chartState.symbol} price history`;
+        const modeLabel = baseRequested
+          ? history.missing_fx
+            ? "Missing FX · showing native"
+            : `Base ${baseLabel}`
+          : "Native currency";
+        dom.historyModalSubtitle.textContent = `${history.window_days}-day window · ${modeLabel}${
+          change !== null && Number.isFinite(change) ? ` · ${formatPercent(change, 1)}` : ""
+        }`;
+        dom.historyModalAlert.classList.toggle("is-visible", baseRequested && history.missing_fx);
+
+        const sources = Array.from(new Set((history.prices || []).map((p) => p.source || p.venue).filter(Boolean)));
+        dom.historyModalSources.textContent = sources.length ? sources.join(", ") : "Source unknown";
+        const toggleDisabled = history.missing_fx && !useBase;
+        dom.historyModalToggle.textContent = toggleDisabled
+          ? "Base FX missing"
+          : baseRequested
+          ? "Show native currency"
+          : `Show ${baseLabel}`;
+        dom.historyModalToggle.disabled = toggleDisabled;
+
+        const target = dom.historyModalChart;
+        target.innerHTML = "";
+        if (series.values.length < 2) {
+          target.innerHTML = '<div class="sparkline__placeholder">Not enough data for this chart.</div>';
+          return;
+        }
+        const svg = buildSparkline(series.values, DETAIL_CHART_WIDTH, DETAIL_CHART_HEIGHT);
+        if (svg) {
+          target.appendChild(svg);
+        } else {
+          target.innerHTML = '<div class="sparkline__placeholder">Chart unavailable.</div>';
+        }
+      }
+
+      async function openHistoryModal(symbol) {
+        if (!ensureAuthenticated()) return;
+        const normalized = (symbol || "").trim();
+        if (!normalized) return;
+        chartState.symbol = normalized;
+        chartState.history = null;
+        chartState.mode = "base";
+        dom.historyModal.classList.remove("is-hidden");
+        dom.historyModalSubtitle.textContent = "Loading…";
+        dom.historyModalChart.innerHTML = '<div class="sparkline__placeholder">Loading…</div>';
+        dom.historyModalAlert.classList.remove("is-visible");
+        dom.historyModalToggle.disabled = true;
+        try {
+          const history = await fetchPriceHistory(normalized, lastBaseCurrency || undefined);
+          chartState.history = history;
+          chartState.mode = history && history.missing_fx ? "native" : "base";
+          renderHistoryModal();
+        } catch (error) {
+          dom.historyModalChart.innerHTML = `<div class="sparkline__placeholder">${
+            error.message || "Failed to load history."
+          }</div>`;
+          dom.historyModalSubtitle.textContent = normalized;
+        } finally {
+          dom.historyModalToggle.disabled = false;
+        }
+      }
+
+      function closeHistoryModal() {
+        dom.historyModal.classList.add("is-hidden");
+        chartState.symbol = null;
+        chartState.history = null;
+        chartState.mode = "base";
       }
 
       function authHeaders() {
@@ -732,15 +1141,18 @@
           dom.snapshotDate.textContent = formatDate(payload.snapshot_dt);
           dom.computedTs.textContent = formatDateTime(payload.computed_ts);
           dom.accountLabel.textContent = payload.account_id;
+          lastBaseCurrency = (payload.base_currency || payload.totals?.base_currency || "").toString().toUpperCase();
+          priceHistoryCache.clear();
           dom.totalValue.textContent = formatCurrency(
             payload.totals?.total_value_base,
             payload.base_currency || payload.totals?.base_currency
           );
-          dom.baseCurrency.textContent = `Base currency ${payload.base_currency || "—"}`;
+          dom.baseCurrency.textContent = `Base currency ${lastBaseCurrency || "—"}`;
           dom.positionsCount.textContent = payload.totals?.positions ?? "—";
           dom.okPositions.textContent = `OK positions ${payload.totals?.ok_positions ?? "—"}`;
 
-          renderRows(payload.rows, payload.base_currency, payload.totals?.total_value_base);
+          renderRows(payload.rows, lastBaseCurrency, payload.totals?.total_value_base);
+          renderSparklines(lastBaseCurrency);
           setStatus("Snapshot ready", "ready");
           setFeedback(`Snapshot loaded for account ${payload.account_id}.`, "success");
           localStorage.setItem(STORAGE_KEY, accountId.trim());
@@ -751,8 +1163,9 @@
             setFeedback(error.message || "Failed to load snapshot.", "error");
           }
           setStatus("Error", "error");
+          lastBaseCurrency = "";
           dom.rowsBody.innerHTML =
-            '<tr><td colspan="6" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>';
+            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>`;
           dom.rowsSummary.textContent = "Request failed.";
         } finally {
           dom.submitButton.disabled = false;
@@ -792,6 +1205,14 @@
       })();
 
       dom.rowsBody.addEventListener("click", (event) => {
+        const sparkline = event.target.closest("[data-sparkline-symbol]");
+        if (sparkline) {
+          const symbol = sparkline.dataset.sparklineSymbol;
+          if (symbol) {
+            openHistoryModal(symbol);
+          }
+          return;
+        }
         const button = event.target.closest("[data-toggle-details]");
         if (!button) return;
         const targetId = button.dataset.toggleDetails;
@@ -801,6 +1222,23 @@
         detailRow.classList.toggle("is-hidden", !isHidden);
         button.setAttribute("aria-expanded", String(isHidden));
         button.textContent = isHidden ? "v" : ">";
+      });
+
+      dom.historyModalClose.addEventListener("click", closeHistoryModal);
+      dom.historyModalToggle.addEventListener("click", () => {
+        if (!chartState.history || dom.historyModalToggle.disabled) return;
+        chartState.mode = chartState.mode === "base" ? "native" : "base";
+        renderHistoryModal();
+      });
+      dom.historyModal.addEventListener("click", (event) => {
+        if (event.target === dom.historyModal) {
+          closeHistoryModal();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !dom.historyModal.classList.contains("is-hidden")) {
+          closeHistoryModal();
+        }
       });
     </script>
   </body>
