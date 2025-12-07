@@ -307,7 +307,7 @@
       }
 
       .sparkline__area {
-        fill: rgba(114, 228, 255, 0.15);
+        fill: rgba(114, 228, 255, 0.22);
         stroke: none;
       }
 
@@ -341,11 +341,11 @@
 
       .modal__dialog {
         width: min(92vw, 820px);
-        background: var(--panel-bg);
-        border: 1px solid var(--panel-border);
+        background: rgba(5, 6, 10, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
         padding: 18px;
-        box-shadow: 0 25px 70px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
       }
 
       .modal__header {
@@ -374,8 +374,8 @@
       }
 
       .modal__chart {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid var(--panel-border);
+        background: rgba(5, 6, 10, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 12px;
       }
@@ -383,6 +383,8 @@
       .modal__chart svg {
         width: 100%;
         height: 200px;
+        background: rgba(5, 6, 10, 0.9);
+        border-radius: 10px;
       }
 
       .modal__meta {
@@ -794,6 +796,12 @@
         svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
         svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         const area = document.createElementNS(svg.namespaceURI, "path");
+        const bg = document.createElementNS(svg.namespaceURI, "rect");
+        bg.setAttribute("x", "0");
+        bg.setAttribute("y", "0");
+        bg.setAttribute("width", String(width));
+        bg.setAttribute("height", String(height));
+        bg.setAttribute("fill", "rgba(5, 6, 10, 0.9)");
         const areaPath = [
           `M 0 ${height}`,
           ...points.map((p) => `L ${p.x} ${p.y}`),
@@ -805,7 +813,7 @@
         const path = document.createElementNS(svg.namespaceURI, "path");
         path.setAttribute("d", `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`);
         path.setAttribute("class", "sparkline__line");
-        svg.append(area, path);
+        svg.append(bg, area, path);
         return svg;
       }
 
