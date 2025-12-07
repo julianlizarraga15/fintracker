@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional, Literal, List, Dict, Iterable, Tuple
 from pydantic import BaseModel, Field
 
@@ -134,7 +134,7 @@ def compute_valuations(
     Build valuation rows from positions, prices and FX data.
     Keeps the logic intentionally lightweight and easy to follow.
     """
-    computed_ts = computed_ts or datetime.utcnow()
+    computed_ts = computed_ts or datetime.now(timezone.utc)
     snapshot_dt = snapshot_dt or date.today()
 
     price_lookup: Dict[str, Price] = {}

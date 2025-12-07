@@ -29,6 +29,11 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
    ```
    The script ensures `.env` variables are loaded and is what automation invokes.
 
+## Binance Spot Balances
+- Enable with `.env`: set `ENABLE_BINANCE=1`, `BINANCE_API_KEY`, `BINANCE_API_SECRET` (optionally override `BINANCE_BASE_URL` or `BINANCE_RECV_WINDOW_MS`).
+- Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
+- Only spot balances are fetched; keep keys scoped accordingly.
+
 ## Fetching Santander Mutual-Fund NAV
 We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA headers, boots a session via the public landing page, and calls `https://www.santander.com.ar/fondosInformacion/funds/<id>/detail` to retrieve `currentShareValue` (`valor de la cuotaparte`) plus its date.
 

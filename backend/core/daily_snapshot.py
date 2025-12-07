@@ -3,7 +3,19 @@ from __future__ import annotations
 from datetime import datetime, date, timezone
 from math import nan
 
-from backend.core.config import IOL_USERNAME, IOL_PASSWORD, ACCOUNT_ID
+from backend.core.binance_client import get_account_balances
+from backend.core.binance_prices import fetch_binance_prices
+from backend.core.binance_transform import balances_to_df
+from backend.core.config import (
+    ACCOUNT_ID,
+    BINANCE_API_KEY,
+    BINANCE_API_SECRET,
+    BINANCE_BASE_URL,
+    BINANCE_RECV_WINDOW_MS,
+    ENABLE_BINANCE,
+    IOL_PASSWORD,
+    IOL_USERNAME,
+)
 from backend.core.iol_client import get_bearer_tokens, get_positions
 from backend.core.iol_transform import extract_positions_as_df
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
@@ -13,6 +25,7 @@ from backend.core.santander_nav import fetch_share_values as fetch_santander_nav
 from backend.core.crypto_holdings import CryptoHolding, load_holdings as load_crypto_holdings
 from backend.core.crypto_prices import fetch_simple_prices as fetch_crypto_prices
 from backend.valuation.models import (
+    FXRate,
     Position as PositionModel,
     Price as PriceModel,
     compute_valuations,
@@ -47,6 +60,8 @@ POSITION_COLUMNS = [
     "price",
     "valuation",
 ]
+
+USDT_USD_RATE = 1.0
 
 
 def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
@@ -127,6 +142,41 @@ def main():
     # set account_id column if present
     if not df.empty:
         df["account_id"] = ACCOUNT_ID
+    elif raw_items:
+        # Fallback: keep raw positions if the parser returned empty
+        fallback_rows = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            symbol = item.get("simbolo") or item.get("ticker") or item.get("codigo")
+            qty = item.get("cantidad") or item.get("cantidadNominal")
+            try:
+                qty_val = float(qty) if qty is not None else 0.0
+            except (TypeError, ValueError):
+                qty_val = 0.0
+            if not symbol or qty_val <= 0:
+                continue
+            price_val = item.get("ultimoPrecio") or item.get("precio")
+            try:
+                price_coerced = float(price_val) if price_val is not None else nan
+            except (TypeError, ValueError):
+                price_coerced = nan
+            fallback_rows.append(
+                {
+                    "symbol": symbol,
+                    "description": item.get("descripcion"),
+                    "instrument_type": item.get("tipoInstrumento") or item.get("instrumento") or item.get("tipo"),
+                    "market": item.get("_market") or item.get("mercado"),
+                    "source": "iol",
+                    "account_id": ACCOUNT_ID,
+                    "currency": None,
+                    "quantity": qty_val,
+                    "price": price_coerced,
+                    "valuation": nan,
+                }
+            )
+        if fallback_rows:
+            df = pd.DataFrame(fallback_rows).reindex(columns=POSITION_COLUMNS)
 
     santander_holdings = load_holdings()
     holdings_by_fund_id: dict[str, list[SantanderHolding]] = {}
@@ -157,6 +207,30 @@ def main():
                 df = crypto_df
         crypto_symbols = {holding["symbol"] for holding in crypto_holdings}
         print(f"Loaded {len(crypto_holdings)} crypto manual holdings.")
+
+    binance_symbols: set[str] = set()
+    if ENABLE_BINANCE and BINANCE_API_KEY and BINANCE_API_SECRET:
+        try:
+            binance_balances = get_account_balances(
+                api_key=BINANCE_API_KEY,
+                api_secret=BINANCE_API_SECRET,
+                base_url=BINANCE_BASE_URL,
+                recv_window_ms=BINANCE_RECV_WINDOW_MS,
+            )
+            binance_df = balances_to_df(binance_balances, position_columns=POSITION_COLUMNS)
+            if not binance_df.empty:
+                if not df.empty:
+                    combined_rows = df.to_dict(orient="records")
+                    combined_rows.extend(binance_df.to_dict(orient="records"))
+                    df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                else:
+                    df = binance_df
+                binance_symbols = set(binance_df["symbol"])
+                print(f"Loaded {len(binance_symbols)} Binance assets.")
+        except Exception as e:
+            print(f"Error fetching Binance balances: {e}")
+    elif ENABLE_BINANCE:
+        print("ENABLE_BINANCE set but missing BINANCE_API_KEY or BINANCE_API_SECRET.")
 
     if df.empty:
         print("No positions found or unexpected API format.")
@@ -268,6 +342,22 @@ def main():
     if crypto_price_models:
         prices.extend(crypto_price_models)
 
+    binance_price_models: list[PriceModel] = []
+    binance_missing_symbols: list[str] = []
+    binance_requires_usdt_fx = False
+    if binance_symbols:
+        try:
+            binance_price_models, binance_missing_symbols = fetch_binance_prices(list(binance_symbols))
+            binance_requires_usdt_fx = any(p.currency == "USDT" for p in binance_price_models)
+        except Exception as e:
+            print(f"Error fetching Binance prices: {e}")
+
+    if binance_price_models:
+        prices.extend(binance_price_models)
+        print(f"Priced {len(binance_price_models)} Binance assets (missing {len(binance_missing_symbols)}).")
+    elif binance_symbols:
+        print("No Binance prices fetched.")
+
     if prices:
         try:
             rows = [p.model_dump() for p in prices]
@@ -292,11 +382,28 @@ def main():
         except Exception as e:
             print(f"Error saving prices snapshot: {e}")
     else:
-        print("No prices fetched from IOL, Santander, or crypto sources.")
+        print("No prices fetched from IOL, Santander, crypto, or Binance sources.")
+
+    extra_fx_rates: list[FXRate] = []
+    if binance_requires_usdt_fx:
+        try:
+            extra_fx_rates.append(
+                FXRate(
+                    asof_dt=date.today(),
+                    from_ccy="USDT",
+                    to_ccy=BASE_CURRENCY,
+                    rate=USDT_USD_RATE,
+                    source="binance_usdt_peg",
+                )
+            )
+        except Exception:
+            print("Error building USDT->USD FX rate placeholder.")
 
     fx_rates = []
     try:
         fx_rates = get_fx_rates()
+        if extra_fx_rates:
+            fx_rates.extend(extra_fx_rates)
         if fx_rates:
             df_fx = pd.DataFrame([r.model_dump() for r in fx_rates])
             info_fx = save_snapshot_files(
@@ -323,6 +430,8 @@ def main():
         else:
             print("No FX rates fetched.")
     except Exception as e:
+        if extra_fx_rates:
+            fx_rates.extend(extra_fx_rates)
         print(f"Error fetching/saving FX rates: {e}")
 
     try:
