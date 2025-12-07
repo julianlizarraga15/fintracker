@@ -378,6 +378,7 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 12px;
+        position: relative;
       }
 
       .modal__chart svg {
@@ -385,6 +386,52 @@
         height: 200px;
         background: rgba(5, 6, 10, 0.9);
         border-radius: 10px;
+      }
+
+      .chart-axis {
+        stroke: rgba(255, 255, 255, 0.14);
+        stroke-width: 1;
+      }
+
+      .chart-grid {
+        stroke: rgba(255, 255, 255, 0.06);
+        stroke-width: 1;
+      }
+
+      .chart-tick {
+        fill: var(--text-muted);
+        font-size: 10px;
+      }
+
+      .chart-dot {
+        fill: var(--accent);
+        stroke: rgba(5, 6, 10, 0.9);
+        stroke-width: 1.5;
+        opacity: 0.9;
+        transition: r 0.1s ease, opacity 0.1s ease;
+      }
+
+      .chart-dot.is-highlighted {
+        opacity: 1;
+        r: 4.5;
+      }
+
+      .chart-tooltip {
+        position: absolute;
+        background: rgba(5, 6, 10, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.9rem;
+        color: #f4f6fb;
+        pointer-events: none;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+        display: none;
+        white-space: nowrap;
+      }
+
+      .chart-tooltip.is-visible {
+        display: block;
       }
 
       .modal__meta {
@@ -756,11 +803,12 @@
 
       function valuesForHistory(history, useBaseCurrency = true) {
         if (!history || !Array.isArray(history.prices)) {
-          return { values: [], dates: [] };
+          return { values: [], dates: [], currencies: [] };
         }
         const base = (history.base_currency || lastBaseCurrency || "").toUpperCase();
         const values = [];
         const dates = [];
+        const currencies = [];
         history.prices.forEach((point) => {
           const priceBase = point.price_base;
           const currency = (point.currency || "").toUpperCase();
@@ -777,8 +825,9 @@
           }
           values.push(Number(value));
           dates.push(point.asof_dt || point.asof_ts || "");
+          currencies.push(useBaseCurrency ? base : currency || "");
         });
-        return { values, dates };
+        return { values, dates, currencies };
       }
 
       function buildSparkline(values, width = SPARKLINE_WIDTH, height = SPARKLINE_HEIGHT) {
@@ -815,6 +864,193 @@
         path.setAttribute("class", "sparkline__line");
         svg.append(bg, area, path);
         return svg;
+      }
+
+      function formatAxisDateLabel(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (!Number.isNaN(date)) {
+          return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        }
+        return String(value);
+      }
+
+      function buildDetailChart(values, dates, currencies, width = DETAIL_CHART_WIDTH, height = DETAIL_CHART_HEIGHT) {
+        if (!values.length) return null;
+        const margin = { top: 10, right: 14, bottom: 32, left: 64 };
+        const innerWidth = Math.max(width - margin.left - margin.right, 1);
+        const innerHeight = Math.max(height - margin.top - margin.bottom, 1);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const baseRange = max - min || 1;
+        const yPadding = baseRange * 0.08;
+        const yMin = min - yPadding;
+        const yMax = max + yPadding;
+        const yRange = yMax - yMin || 1;
+        const step = values.length > 1 ? innerWidth / (values.length - 1) : innerWidth;
+        const points = values.map((val, idx) => {
+          const x = margin.left + idx * step;
+          const y = margin.top + innerHeight - ((val - yMin) / yRange) * innerHeight;
+          return { x, y, value: val, date: dates[idx], currency: currencies?.[idx] };
+        });
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+        const bg = document.createElementNS(svg.namespaceURI, "rect");
+        bg.setAttribute("x", "0");
+        bg.setAttribute("y", "0");
+        bg.setAttribute("width", String(width));
+        bg.setAttribute("height", String(height));
+        bg.setAttribute("fill", "rgba(5, 6, 10, 0.9)");
+        svg.appendChild(bg);
+
+        const axisGroup = document.createElementNS(svg.namespaceURI, "g");
+        const xAxisY = margin.top + innerHeight;
+        const xAxis = document.createElementNS(svg.namespaceURI, "line");
+        xAxis.setAttribute("x1", String(margin.left));
+        xAxis.setAttribute("x2", String(width - margin.right));
+        xAxis.setAttribute("y1", String(xAxisY));
+        xAxis.setAttribute("y2", String(xAxisY));
+        xAxis.setAttribute("class", "chart-axis");
+        axisGroup.appendChild(xAxis);
+
+        const yAxis = document.createElementNS(svg.namespaceURI, "line");
+        yAxis.setAttribute("x1", String(margin.left));
+        yAxis.setAttribute("x2", String(margin.left));
+        yAxis.setAttribute("y1", String(margin.top));
+        yAxis.setAttribute("y2", String(xAxisY));
+        yAxis.setAttribute("class", "chart-axis");
+        axisGroup.appendChild(yAxis);
+
+        const yTickCount = 4;
+        for (let i = 0; i <= yTickCount; i += 1) {
+          const ratio = i / yTickCount;
+          const y = margin.top + innerHeight - ratio * innerHeight;
+          const grid = document.createElementNS(svg.namespaceURI, "line");
+          grid.setAttribute("x1", String(margin.left));
+          grid.setAttribute("x2", String(width - margin.right));
+          grid.setAttribute("y1", String(y));
+          grid.setAttribute("y2", String(y));
+          grid.setAttribute("class", "chart-grid");
+          axisGroup.appendChild(grid);
+
+          const label = document.createElementNS(svg.namespaceURI, "text");
+          label.setAttribute("x", String(margin.left - 8));
+          label.setAttribute("y", String(y + 3));
+          label.setAttribute("class", "chart-tick");
+          label.setAttribute("text-anchor", "end");
+          const tickValue = yMin + yRange * ratio;
+          const fractionDigits = Math.abs(tickValue) >= 100 ? 0 : 2;
+          label.textContent = formatNumber(tickValue, { maximumFractionDigits: fractionDigits });
+          axisGroup.appendChild(label);
+        }
+
+        const xTickCount = Math.min(5, points.length);
+        for (let i = 0; i < xTickCount; i += 1) {
+          const ratio = xTickCount === 1 ? 0 : i / (xTickCount - 1);
+          const index = Math.round((points.length - 1) * ratio);
+          const point = points[index];
+          if (!point) continue;
+          const tick = document.createElementNS(svg.namespaceURI, "text");
+          tick.setAttribute("x", String(point.x));
+          tick.setAttribute("y", String(xAxisY + 14));
+          tick.setAttribute("class", "chart-tick");
+          tick.setAttribute("text-anchor", "middle");
+          tick.textContent = formatAxisDateLabel(dates[index]);
+          axisGroup.appendChild(tick);
+        }
+
+        svg.appendChild(axisGroup);
+
+        const area = document.createElementNS(svg.namespaceURI, "path");
+        const baseY = xAxisY;
+        const areaPath = [
+          `M ${margin.left} ${baseY}`,
+          ...points.map((p) => `L ${p.x} ${p.y}`),
+          `L ${points[points.length - 1].x} ${baseY}`,
+          "Z",
+        ].join(" ");
+        area.setAttribute("d", areaPath);
+        area.setAttribute("class", "sparkline__area");
+
+        const path = document.createElementNS(svg.namespaceURI, "path");
+        path.setAttribute("d", `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`);
+        path.setAttribute("class", "sparkline__line");
+
+        const dotsGroup = document.createElementNS(svg.namespaceURI, "g");
+        points.forEach((point, idx) => {
+          const dot = document.createElementNS(svg.namespaceURI, "circle");
+          dot.setAttribute("cx", String(point.x));
+          dot.setAttribute("cy", String(point.y));
+          dot.setAttribute("r", "3");
+          dot.setAttribute("class", "chart-dot");
+          dot.dataset.index = String(idx);
+          dotsGroup.appendChild(dot);
+        });
+
+        svg.append(area, path, dotsGroup);
+        return { svg, points };
+      }
+
+      function attachChartTooltip(container, svg, points, history, useBaseCurrency) {
+        if (!container || !svg || !points.length) return;
+        const tooltip = document.createElement("div");
+        tooltip.className = "chart-tooltip";
+        container.appendChild(tooltip);
+        const dots = Array.from(svg.querySelectorAll(".chart-dot"));
+        const viewBox = svg.viewBox.baseVal;
+        const baseLabel = (history.base_currency || lastBaseCurrency || "").toUpperCase() || "BASE";
+
+        function hide() {
+          tooltip.classList.remove("is-visible");
+          dots.forEach((dot) => dot.classList.remove("is-highlighted"));
+        }
+
+        function show(index, event) {
+          const point = points[index];
+          if (!point) return;
+          dots.forEach((dot, idx) => dot.classList.toggle("is-highlighted", idx === index));
+          const formattedDate = formatDate(point.date);
+          const dateLabel = formattedDate && formattedDate !== "—" ? formattedDate : `Day ${index + 1}`;
+          const currencyLabel = useBaseCurrency
+            ? baseLabel
+            : (point.currency || history.prices?.[index]?.currency || "native").toString().toUpperCase();
+          tooltip.textContent = `${dateLabel} · ${formatNumber(point.value)} ${currencyLabel}`;
+          const containerRect = container.getBoundingClientRect();
+          const relativeX = viewBox.width
+            ? ((point.x - viewBox.x) / viewBox.width) * containerRect.width
+            : point.x;
+          const relativeY = viewBox.height
+            ? ((point.y - viewBox.y) / viewBox.height) * containerRect.height
+            : point.y;
+          const sourceX = event ? event.clientX - containerRect.left : relativeX;
+          const sourceY = event ? event.clientY - containerRect.top : relativeY;
+          const left = Math.min(Math.max(sourceX + 12, 8), containerRect.width - 8);
+          const top = Math.max(sourceY - 28, 8);
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
+          tooltip.classList.add("is-visible");
+        }
+
+        svg.addEventListener("mousemove", (event) => {
+          const rect = svg.getBoundingClientRect();
+          const pointerX =
+            rect.width > 0 ? ((event.clientX - rect.left) / rect.width) * viewBox.width + viewBox.x : event.clientX;
+          let closestIndex = 0;
+          let minDelta = Infinity;
+          points.forEach((point, idx) => {
+            const delta = Math.abs(point.x - pointerX);
+            if (delta < minDelta) {
+              minDelta = delta;
+              closestIndex = idx;
+            }
+          });
+          show(closestIndex, event);
+        });
+
+        svg.addEventListener("mouseleave", hide);
       }
 
       async function fetchPriceHistory(symbol, baseCurrency, windowDays = PRICE_HISTORY_WINDOW_DAYS) {
@@ -1069,9 +1305,16 @@
           target.innerHTML = '<div class="sparkline__placeholder">Not enough data for this chart.</div>';
           return;
         }
-        const svg = buildSparkline(series.values, DETAIL_CHART_WIDTH, DETAIL_CHART_HEIGHT);
-        if (svg) {
-          target.appendChild(svg);
+        const detailChart = buildDetailChart(
+          series.values,
+          series.dates,
+          series.currencies,
+          DETAIL_CHART_WIDTH,
+          DETAIL_CHART_HEIGHT
+        );
+        if (detailChart && detailChart.svg) {
+          target.appendChild(detailChart.svg);
+          attachChartTooltip(target, detailChart.svg, detailChart.points, history, useBase);
         } else {
           target.innerHTML = '<div class="sparkline__placeholder">Chart unavailable.</div>';
         }
