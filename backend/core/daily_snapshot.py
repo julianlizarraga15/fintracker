@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, date, timezone
 from math import nan
+from typing import Any
 
 from backend.core.binance_client import get_account_balances
 from backend.core.binance_prices import fetch_binance_prices
 from backend.core.binance_transform import balances_to_df
 from backend.core.config import (
     ACCOUNT_ID,
+    BINANCE_BALANCE_LAMBDA,
     BINANCE_API_KEY,
     BINANCE_API_SECRET,
     BINANCE_BASE_URL,
@@ -62,6 +65,58 @@ POSITION_COLUMNS = [
 ]
 
 USDT_USD_RATE = 1.0
+
+
+def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, Any]]:
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except Exception as exc:
+        raise RuntimeError("boto3 is required to invoke the Binance balance Lambda.") from exc
+
+    try:
+        client = boto3.client("lambda")
+        response = client.invoke(FunctionName=function_name, InvocationType="RequestResponse")
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Error invoking Lambda '{function_name}': {exc}") from exc
+
+    status_code = response.get("StatusCode")
+    payload_stream = response.get("Payload")
+    payload_text = payload_stream.read().decode("utf-8") if payload_stream else ""
+
+    if status_code and status_code >= 400:
+        raise RuntimeError(f"Lambda '{function_name}' returned status {status_code}: {payload_text[:200]}")
+
+    if not payload_text:
+        return []
+
+    try:
+        payload_json = json.loads(payload_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Unexpected Lambda payload from '{function_name}': {payload_text[:200]}"
+        ) from exc
+
+    if isinstance(payload_json, dict) and "statusCode" in payload_json and payload_json.get("statusCode", 200) >= 400:
+        raise RuntimeError(
+            f"Lambda '{function_name}' responded with status {payload_json.get('statusCode')}: {payload_text[:200]}"
+        )
+
+    if isinstance(payload_json, dict) and "body" in payload_json:
+        body_content = payload_json.get("body")
+        try:
+            payload_json = json.loads(body_content) if isinstance(body_content, str) else body_content
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Unexpected Lambda body from '{function_name}': {str(body_content)[:200]}"
+            ) from exc
+
+    if not isinstance(payload_json, list):
+        raise RuntimeError(
+            f"Lambda '{function_name}' returned unexpected payload type: {type(payload_json).__name__}"
+        )
+
+    return payload_json
 
 
 def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
@@ -209,28 +264,34 @@ def main():
         print(f"Loaded {len(crypto_holdings)} crypto manual holdings.")
 
     binance_symbols: set[str] = set()
-    if ENABLE_BINANCE and BINANCE_API_KEY and BINANCE_API_SECRET:
+    binance_balances: list[dict[str, Any]] = []
+    if ENABLE_BINANCE:
         try:
-            binance_balances = get_account_balances(
-                api_key=BINANCE_API_KEY,
-                api_secret=BINANCE_API_SECRET,
-                base_url=BINANCE_BASE_URL,
-                recv_window_ms=BINANCE_RECV_WINDOW_MS,
-            )
-            binance_df = balances_to_df(binance_balances, position_columns=POSITION_COLUMNS)
-            if not binance_df.empty:
-                if not df.empty:
-                    combined_rows = df.to_dict(orient="records")
-                    combined_rows.extend(binance_df.to_dict(orient="records"))
-                    df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
-                else:
-                    df = binance_df
-                binance_symbols = set(binance_df["symbol"])
-                print(f"Loaded {len(binance_symbols)} Binance assets.")
+            if BINANCE_BALANCE_LAMBDA:
+                binance_balances = _fetch_binance_balances_from_lambda(BINANCE_BALANCE_LAMBDA)
+            elif BINANCE_API_KEY and BINANCE_API_SECRET:
+                binance_balances = get_account_balances(
+                    api_key=BINANCE_API_KEY,
+                    api_secret=BINANCE_API_SECRET,
+                    base_url=BINANCE_BASE_URL,
+                    recv_window_ms=BINANCE_RECV_WINDOW_MS,
+                )
+            else:
+                print("ENABLE_BINANCE set but missing BINANCE_API_KEY or BINANCE_API_SECRET.")
+
+            if binance_balances:
+                binance_df = balances_to_df(binance_balances, position_columns=POSITION_COLUMNS)
+                if not binance_df.empty:
+                    if not df.empty:
+                        combined_rows = df.to_dict(orient="records")
+                        combined_rows.extend(binance_df.to_dict(orient="records"))
+                        df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                    else:
+                        df = binance_df
+                    binance_symbols = set(binance_df["symbol"])
+                    print(f"Loaded {len(binance_symbols)} Binance assets.")
         except Exception as e:
             print(f"Error fetching Binance balances: {e}")
-    elif ENABLE_BINANCE:
-        print("ENABLE_BINANCE set but missing BINANCE_API_KEY or BINANCE_API_SECRET.")
 
     if df.empty:
         print("No positions found or unexpected API format.")

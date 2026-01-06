@@ -50,3 +50,4 @@ try:
 except ValueError:
     BINANCE_RECV_WINDOW_MS = DEFAULT_BINANCE_RECV_WINDOW_MS
 ENABLE_BINANCE = _env_as_bool(os.getenv("ENABLE_BINANCE"))
+BINANCE_BALANCE_LAMBDA = os.getenv("BINANCE_BALANCE_LAMBDA", "fintracker-fetch-binance-balance")
