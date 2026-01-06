@@ -75,7 +75,7 @@ def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, An
         raise RuntimeError("boto3 is required to invoke the Binance balance Lambda.") from exc
 
     try:
-        client = boto3.client("lambda")
+        client = boto3.client("lambda", region_name="sa-east-1")
         response = client.invoke(FunctionName=function_name, InvocationType="RequestResponse")
     except (BotoCoreError, ClientError) as exc:
         raise RuntimeError(f"Error invoking Lambda '{function_name}': {exc}") from exc
