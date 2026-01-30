@@ -7,7 +7,7 @@ from backend.core.config import ETHERSCAN_API_KEY
 
 LOG = logging.getLogger(__name__)
 
-ETHERSCAN_BASE_URL = "https://api.etherscan.io/api"
+ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
 ETHEREUM_SOURCE = "metamask"
 ETHEREUM_MARKET = "crypto"
 
@@ -22,6 +22,7 @@ def _get_etherscan(params: Dict[str, Any], timeout: int = 15) -> Any:
         raise EtherscanAPIError("Etherscan API key missing.")
 
     params["apikey"] = ETHERSCAN_API_KEY
+    params["chainid"] = "1"  # Ethereum Mainnet
     
     try:
         resp = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=timeout)
