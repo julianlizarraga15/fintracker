@@ -34,6 +34,11 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
 - Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
 - Only spot balances are fetched; keep keys scoped accordingly.
 
+## MetaMask / Ethereum Wallet Balances
+- Enable with `.env`: set `ENABLE_ETHEREUM=true`, `ETHERSCAN_API_KEY`, and `ETHEREUM_WALLET_ADDRESSES` (comma-separated list of 0x... addresses).
+- Automatically fetches native ETH and ERC-20 token balances using the Etherscan API.
+- Token balances are automatically adjusted for decimals and priced alongside other crypto assets.
+
 ## Fetching Santander Mutual-Fund NAV
 We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA headers, boots a session via the public landing page, and calls `https://www.santander.com.ar/fondosInformacion/funds/<id>/detail` to retrieve `currentShareValue` (`valor de la cuotaparte`) plus its date.
 

@@ -8,6 +8,8 @@ from typing import Any
 from backend.core.binance_client import get_account_balances
 from backend.core.binance_prices import fetch_binance_prices
 from backend.core.binance_transform import balances_to_df
+from backend.core.ethereum_client import get_all_balances as get_ethereum_balances
+from backend.core.ethereum_transform import ethereum_balances_to_df
 from backend.core.config import (
     ACCOUNT_ID,
     BINANCE_BALANCE_LAMBDA,
@@ -16,6 +18,8 @@ from backend.core.config import (
     BINANCE_BASE_URL,
     BINANCE_RECV_WINDOW_MS,
     ENABLE_BINANCE,
+    ENABLE_ETHEREUM,
+    ETHEREUM_WALLET_ADDRESSES,
     IOL_PASSWORD,
     IOL_USERNAME,
 )
@@ -293,6 +297,28 @@ def main():
         except Exception as e:
             print(f"Error fetching Binance balances: {e}")
 
+    ethereum_symbols: set[str] = set()
+    if ENABLE_ETHEREUM:
+        try:
+            addresses = [a.strip() for a in ETHEREUM_WALLET_ADDRESSES.split(",") if a.strip()]
+            if addresses:
+                eth_balances = get_ethereum_balances(addresses)
+                if eth_balances:
+                    eth_df = ethereum_balances_to_df(eth_balances, position_columns=POSITION_COLUMNS)
+                    if not eth_df.empty:
+                        if not df.empty:
+                            combined_rows = df.to_dict(orient="records")
+                            combined_rows.extend(eth_df.to_dict(orient="records"))
+                            df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                        else:
+                            df = eth_df
+                        ethereum_symbols = set(eth_df["symbol"])
+                        print(f"Loaded {len(ethereum_symbols)} Ethereum assets.")
+            else:
+                print("ENABLE_ETHEREUM set but ETHEREUM_WALLET_ADDRESSES is empty.")
+        except Exception as e:
+            print(f"Error fetching Ethereum balances: {e}")
+
     if df.empty:
         print("No positions found or unexpected API format.")
         try:
@@ -418,6 +444,30 @@ def main():
         print(f"Priced {len(binance_price_models)} Binance assets (missing {len(binance_missing_symbols)}).")
     elif binance_symbols:
         print("No Binance prices fetched.")
+
+    # Fetch prices for Ethereum assets if not already fetched
+    if ethereum_symbols:
+        missing_eth_symbols = ethereum_symbols - {p.symbol for p in prices}
+        if missing_eth_symbols:
+            try:
+                eth_price_rows = fetch_crypto_prices(list(missing_eth_symbols))
+                for row in eth_price_rows:
+                    prices.append(
+                        PriceModel(
+                            asof_dt=row["asof_dt"],
+                            asof_ts=row.get("asof_ts"),
+                            symbol=row["symbol"],
+                            price_type="last",
+                            price=row["price"],
+                            currency=row["currency"],
+                            venue=row["venue"],
+                            source=row["source"],
+                            quality_score=row["quality_score"],
+                        )
+                    )
+                print(f"Priced {len(eth_price_rows)} Ethereum assets.")
+            except Exception as e:
+                print(f"Error fetching Ethereum asset prices: {e}")
 
     if prices:
         try:

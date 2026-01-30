@@ -51,3 +51,8 @@ except ValueError:
     BINANCE_RECV_WINDOW_MS = DEFAULT_BINANCE_RECV_WINDOW_MS
 ENABLE_BINANCE = _env_as_bool(os.getenv("ENABLE_BINANCE"))
 BINANCE_BALANCE_LAMBDA = os.getenv("BINANCE_BALANCE_LAMBDA", "fintracker-fetch-binance-balance")
+
+# Ethereum / MetaMask
+ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
+ETHEREUM_WALLET_ADDRESSES = os.getenv("ETHEREUM_WALLET_ADDRESSES", "")
+ENABLE_ETHEREUM = _env_as_bool(os.getenv("ENABLE_ETHEREUM"))
