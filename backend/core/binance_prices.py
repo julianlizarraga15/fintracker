@@ -106,7 +106,7 @@ def fetch_binance_prices(
         seen.add(symbol)
 
         if symbol in BINANCE_STABLECOINS:
-            prices.append(_build_price(symbol, 1.0, "USDT", asof_dt, asof_ts))
+            prices.append(_build_price(symbol, 1.0, "USD", asof_dt, asof_ts))
             continue
 
         pair = f"{symbol}USDT"

@@ -11,6 +11,9 @@ COINGECKO_SIMPLE_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
 SUPPORTED_SYMBOL_TO_ID: Dict[str, str] = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
+    "USDC": "usd-coin",
+    "USDT": "tether",
+    "DAI": "dai",
 }
 DEFAULT_PRICE_CCY = "USD"
 QUALITY_SCORE_COINGECKO = 85
