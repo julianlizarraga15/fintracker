@@ -8,7 +8,6 @@ from backend.core.config import ETHERSCAN_API_KEY, ETHEREUM_TOKEN_CONTRACTS
 LOG = logging.getLogger(__name__)
 
 ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
-ETHEREUM_SOURCE = "metamask"
 ETHEREUM_MARKET = "crypto"
 
 class EtherscanAPIError(RuntimeError):
@@ -39,7 +38,7 @@ def _get_etherscan(params: Dict[str, Any], timeout: int = 15) -> Any:
 
     return data.get("result")
 
-def get_eth_balance(address: str) -> Dict[str, Any]:
+def get_eth_balance(address: str, source: str = "metamask") -> Dict[str, Any]:
     """Fetch native ETH balance for an address."""
     params = {
         "module": "account",
@@ -59,12 +58,12 @@ def get_eth_balance(address: str) -> Dict[str, Any]:
     return {
         "symbol": "ETH",
         "quantity": eth_balance,
-        "source": ETHEREUM_SOURCE,
+        "source": source,
         "market": ETHEREUM_MARKET,
         "address": address
     }
 
-def get_token_balances(address: str) -> List[Dict[str, Any]]:
+def get_token_balances(address: str, source: str = "metamask") -> List[Dict[str, Any]]:
     """
     Fetch ERC-20 token balances for an address using specific contract addresses.
     Config format: SYMBOL:CONTRACT_ADDRESS,SYMBOL:CONTRACT_ADDRESS
@@ -120,7 +119,7 @@ def get_token_balances(address: str) -> List[Dict[str, Any]]:
                 tokens.append({
                     "symbol": symbol,
                     "quantity": quantity,
-                    "source": ETHEREUM_SOURCE,
+                    "source": source,
                     "market": ETHEREUM_MARKET,
                     "address": address
                 })
@@ -130,7 +129,7 @@ def get_token_balances(address: str) -> List[Dict[str, Any]]:
             
     return tokens
 
-def get_all_balances(addresses: List[str]) -> List[Dict[str, Any]]:
+def get_all_balances(addresses: List[str], source: str = "metamask") -> List[Dict[str, Any]]:
     all_holdings = []
     for addr in addresses:
         addr = addr.strip()
@@ -139,13 +138,13 @@ def get_all_balances(addresses: List[str]) -> List[Dict[str, Any]]:
         
         # Get ETH
         try:
-            all_holdings.append(get_eth_balance(addr))
+            all_holdings.append(get_eth_balance(addr, source=source))
         except Exception as e:
             LOG.error(f"Error fetching ETH balance for {addr}: {e}")
 
         # Get Tokens
         try:
-            all_holdings.extend(get_token_balances(addr))
+            all_holdings.extend(get_token_balances(addr, source=source))
         except Exception as e:
             LOG.error(f"Error fetching token balances for {addr}: {e}")
             

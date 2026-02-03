@@ -21,7 +21,7 @@ def ethereum_balances_to_df(balances: List[Dict[str, Any]], position_columns: Op
             "quantity": b["quantity"],
             "currency": "USD",  # Default for crypto prices in this system
             "instrument_type": "crypto",
-            "display_name": f"{b['symbol']} (MetaMask)",
+            "display_name": f"{b['symbol']} ({b['source'].capitalize()})",
         })
 
     df = pd.DataFrame(rows)

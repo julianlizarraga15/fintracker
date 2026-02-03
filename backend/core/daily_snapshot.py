@@ -9,6 +9,7 @@ from backend.core.binance_client import get_account_balances
 from backend.core.binance_prices import fetch_binance_prices
 from backend.core.binance_transform import balances_to_df
 from backend.core.ethereum_client import get_all_balances as get_ethereum_balances
+from backend.core.bitcoin_client import get_all_btc_balances
 from backend.core.ethereum_transform import ethereum_balances_to_df
 from backend.core.config import (
     ACCOUNT_ID,
@@ -19,7 +20,10 @@ from backend.core.config import (
     BINANCE_RECV_WINDOW_MS,
     ENABLE_BINANCE,
     ENABLE_ETHEREUM,
+    ENABLE_EXODUS,
     ETHEREUM_WALLET_ADDRESSES,
+    EXODUS_ETH_ADDRESSES,
+    EXODUS_BTC_ADDRESSES,
     IOL_PASSWORD,
     IOL_USERNAME,
 )
@@ -319,6 +323,48 @@ def main():
         except Exception as e:
             print(f"Error fetching Ethereum balances: {e}")
 
+    exodus_symbols: set[str] = set()
+    if ENABLE_EXODUS:
+        # Exodus ETH
+        try:
+            eth_addresses = [a.strip() for a in EXODUS_ETH_ADDRESSES.split(",") if a.strip()]
+            if eth_addresses:
+                eth_balances = get_ethereum_balances(eth_addresses, source="exodus")
+                if eth_balances:
+                    eth_df = ethereum_balances_to_df(eth_balances, position_columns=POSITION_COLUMNS)
+                    if not eth_df.empty:
+                        if not df.empty:
+                            combined_rows = df.to_dict(orient="records")
+                            combined_rows.extend(eth_df.to_dict(orient="records"))
+                            df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                        else:
+                            df = eth_df
+                        exodus_symbols.update(eth_df["symbol"])
+                        print(f"Loaded {len(eth_balances)} Exodus Ethereum assets.")
+        except Exception as e:
+            print(f"Error fetching Exodus Ethereum balances: {e}")
+
+        # Exodus BTC
+        try:
+            btc_addresses = [a.strip() for a in EXODUS_BTC_ADDRESSES.split(",") if a.strip()]
+            if btc_addresses:
+                btc_balances = get_all_btc_balances(btc_addresses, source="exodus")
+                if btc_balances:
+                    # Reuse ethereum_balances_to_df for simplicity as it's just a mapper
+                    # but we'll manually fix the display name if needed or just let it be
+                    btc_df = ethereum_balances_to_df(btc_balances, position_columns=POSITION_COLUMNS)
+                    if not btc_df.empty:
+                        if not df.empty:
+                            combined_rows = df.to_dict(orient="records")
+                            combined_rows.extend(btc_df.to_dict(orient="records"))
+                            df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                        else:
+                            df = btc_df
+                        exodus_symbols.update(btc_df["symbol"])
+                        print(f"Loaded {len(btc_balances)} Exodus Bitcoin assets.")
+        except Exception as e:
+            print(f"Error fetching Exodus Bitcoin balances: {e}")
+
     if df.empty:
         print("No positions found or unexpected API format.")
         try:
@@ -468,6 +514,30 @@ def main():
                 print(f"Priced {len(eth_price_rows)} Ethereum assets.")
             except Exception as e:
                 print(f"Error fetching Ethereum asset prices: {e}")
+
+    # Fetch prices for Exodus assets if not already fetched
+    if exodus_symbols:
+        missing_exodus_symbols = exodus_symbols - {p.symbol for p in prices}
+        if missing_exodus_symbols:
+            try:
+                exodus_price_rows = fetch_crypto_prices(list(missing_exodus_symbols))
+                for row in exodus_price_rows:
+                    prices.append(
+                        PriceModel(
+                            asof_dt=row["asof_dt"],
+                            asof_ts=row.get("asof_ts"),
+                            symbol=row["symbol"],
+                            price_type="last",
+                            price=row["price"],
+                            currency=row["currency"],
+                            venue=row["venue"],
+                            source=row["source"],
+                            quality_score=row["quality_score"],
+                        )
+                    )
+                print(f"Priced {len(exodus_price_rows)} Exodus assets.")
+            except Exception as e:
+                print(f"Error fetching Exodus asset prices: {e}")
 
     if prices:
         try:
