@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import requests
 from typing import Any, Dict, List, Optional
-from backend.core.config import ETHERSCAN_API_KEY
+from backend.core.config import ETHERSCAN_API_KEY, ETHEREUM_TOKEN_CONTRACTS
 
 LOG = logging.getLogger(__name__)
 
@@ -66,44 +66,54 @@ def get_eth_balance(address: str) -> Dict[str, Any]:
 
 def get_token_balances(address: str) -> List[Dict[str, Any]]:
     """
-    Fetch ERC-20 token balances for an address.
-    Note: Etherscan doesn't have a single 'get all token balances' for free tier.
-    We use the 'addresstokenbalance' or similar if available, 
-    but usually we'd need to know the contract addresses.
-    
-    A better way for free tier is to check 'tokentx' and see what they hold,
-    but Etherscan recently added 'pro' features for this.
-    
-    For the free tier, we can use 'tokenbalance' if we have a list of tokens,
-    OR we can use the 'tokenlist' if the user has a Pro API key.
-    
-    Actually, Etherscan has a 'tokenbalance' action but it requires contractaddress.
-    
-    Wait, the plan mentioned 'module=account&action=tokenlist'. 
-    Let's check if that works or if we should use a different approach.
+    Fetch ERC-20 token balances for an address using specific contract addresses.
+    Config format: SYMBOL:CONTRACT_ADDRESS,SYMBOL:CONTRACT_ADDRESS
     """
-    # Attempting to use the 'tokenlist' action if available (some Etherscan-like APIs support it)
-    # If not, we might need to fall back to a known list of tokens or a different provider.
-    # For now, let's implement the 'tokenlist' as suggested in the plan.
-    
-    params = {
-        "module": "account",
-        "action": "tokenlist",
-        "address": address
-    }
-    
-    try:
-        result = _get_etherscan(params)
-    except EtherscanAPIError as e:
-        LOG.warning(f"Could not fetch token list for {address}: {e}")
+    if not ETHEREUM_TOKEN_CONTRACTS:
         return []
 
+    token_configs = [t.strip() for t in ETHEREUM_TOKEN_CONTRACTS.split(",") if ":" in t]
     tokens = []
-    for item in result:
+
+    for config in token_configs:
         try:
-            symbol = item.get("symbol", "").upper()
-            decimals = int(item.get("decimals", 18))
-            balance_raw = int(item.get("balance", 0))
+            symbol, contract = config.split(":", 1)
+            symbol = symbol.strip().upper()
+            contract = contract.strip()
+
+            # First get the balance
+            balance_params = {
+                "module": "account",
+                "action": "tokenbalance",
+                "contractaddress": contract,
+                "address": address,
+                "tag": "latest"
+            }
+            
+            balance_result = _get_etherscan(balance_params)
+            balance_raw = int(balance_result)
+
+            if balance_raw <= 0:
+                continue
+
+            # Then get the decimals (could be cached, but for now we fetch)
+            # Note: module=token&action=tokeninfo is a Pro feature, 
+            # but module=account&action=tokentx often has decimals, or we can use common defaults.
+            # For simplicity and reliability on free tier, we'll try to get decimals via a standard call if possible,
+            # or default to 18 which is most common.
+            
+            # Etherscan V2 has a way to get token info? 
+            # Actually, common tokens like USDC (6) are exceptions. 
+            # Let's use a small map for common ones and default to 18.
+            common_decimals = {
+                "USDC": 6,
+                "USDT": 6,
+                "DAI": 18,
+                "LINK": 18,
+                "WBTC": 8,
+            }
+            decimals = common_decimals.get(symbol, 18)
+
             quantity = balance_raw / 10**decimals
             
             if quantity > 0:
@@ -114,7 +124,8 @@ def get_token_balances(address: str) -> List[Dict[str, Any]]:
                     "market": ETHEREUM_MARKET,
                     "address": address
                 })
-        except (ValueError, TypeError):
+        except Exception as e:
+            LOG.warning(f"Error fetching balance for token {config}: {e}")
             continue
             
     return tokens
