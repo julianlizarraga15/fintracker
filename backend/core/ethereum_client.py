@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import requests
+import time
 from typing import Any, Dict, List, Optional
 from backend.core.config import ETHERSCAN_API_KEY, ETHEREUM_TOKEN_CONTRACTS
 
@@ -16,21 +17,42 @@ class EtherscanAPIError(RuntimeError):
         self.status_code = status_code
         self.payload = payload
 
-def _get_etherscan(params: Dict[str, Any], timeout: int = 15) -> Any:
+def _get_etherscan(params: Dict[str, Any], timeout: int = 15, max_retries: int = 3) -> Any:
     if not ETHERSCAN_API_KEY:
         raise EtherscanAPIError("Etherscan API key missing.")
 
     params["apikey"] = ETHERSCAN_API_KEY
     params["chainid"] = "1"  # Ethereum Mainnet
     
-    try:
-        resp = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as exc:
-        raise EtherscanAPIError(f"Etherscan request error: {exc}") from exc
-    except ValueError as exc:
-        raise EtherscanAPIError(f"Etherscan returned non-JSON: {exc}") from exc
+    for attempt in range(max_retries):
+        try:
+            # Small delay to respect 5 calls/sec limit (free tier)
+            time.sleep(0.25)
+            
+            resp = requests.get(ETHERSCAN_BASE_URL, params=params, timeout=timeout)
+            
+            # Handle rate limiting (429)
+            if resp.status_code == 429:
+                LOG.warning(f"Etherscan rate limit hit (429). Attempt {attempt + 1}/{max_retries}. Sleeping...")
+                time.sleep(1.0 * (attempt + 1))
+                continue
+
+            resp.raise_for_status()
+            data = resp.json()
+            
+            # Etherscan sometimes returns 200 but with a rate limit message in the JSON
+            if data.get("status") == "0" and "rate limit" in (data.get("result") or "").lower():
+                LOG.warning(f"Etherscan internal rate limit hit. Attempt {attempt + 1}/{max_retries}. Sleeping...")
+                time.sleep(1.0 * (attempt + 1))
+                continue
+                
+            break # Success
+        except requests.RequestException as exc:
+            if attempt == max_retries - 1:
+                raise EtherscanAPIError(f"Etherscan request error: {exc}") from exc
+            time.sleep(1.0 * (attempt + 1))
+        except ValueError as exc:
+            raise EtherscanAPIError(f"Etherscan returned non-JSON: {exc}") from exc
 
     if data.get("status") != "1" and data.get("message") != "No transactions found":
         # "0" status usually means error, but "No transactions found" is fine for tokens

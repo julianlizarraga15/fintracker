@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Dict, List
 
+import logging
 import requests
+
+LOG = logging.getLogger(__name__)
 
 COINGECKO_SIMPLE_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
 SUPPORTED_SYMBOL_TO_ID: Dict[str, str] = {
@@ -45,17 +48,17 @@ def fetch_simple_prices(symbols: List[str]) -> List[dict]:
             timeout=10,
         )
     except requests.RequestException as exc:
-        print(f"[warn] Error calling CoinGecko: {exc}")
+        LOG.warning(f"Error calling CoinGecko: {exc}")
         return []
 
     if resp.status_code != 200:
-        print(f"[warn] CoinGecko response {resp.status_code}: {resp.text[:200]}")
+        LOG.warning(f"CoinGecko response {resp.status_code}: {resp.text[:200]}")
         return []
 
     try:
         payload = resp.json()
     except ValueError as exc:
-        print(f"[warn] Invalid JSON from CoinGecko: {exc}")
+        LOG.warning(f"Invalid JSON from CoinGecko: {exc}")
         return []
 
     asof_dt = date.today()
