@@ -21,9 +21,11 @@ from backend.core.config import (
     ENABLE_BINANCE,
     ENABLE_ETHEREUM,
     ENABLE_EXODUS,
+    ENABLE_METAMASK_BTC,
     ETHEREUM_WALLET_ADDRESSES,
     EXODUS_ETH_ADDRESSES,
     EXODUS_BTC_ADDRESSES,
+    METAMASK_BTC_ADDRESSES,
     IOL_PASSWORD,
     IOL_USERNAME,
 )
@@ -364,6 +366,27 @@ def main():
                         print(f"Loaded {len(btc_balances)} Exodus Bitcoin assets.")
         except Exception as e:
             print(f"Error fetching Exodus Bitcoin balances: {e}")
+
+        # MetaMask BTC
+        try:
+            btc_addresses = [a.strip() for a in METAMASK_BTC_ADDRESSES.split(",") if a.strip()]
+            if btc_addresses:
+                btc_balances = get_all_btc_balances(btc_addresses, source="metamask")
+                if btc_balances:
+                    btc_df = ethereum_balances_to_df(btc_balances, position_columns=POSITION_COLUMNS)
+                    if not btc_df.empty:
+                        if not df.empty:
+                            combined_rows = df.to_dict(orient="records")
+                            combined_rows.extend(btc_df.to_dict(orient="records"))
+                            df = pd.DataFrame(combined_rows).reindex(columns=POSITION_COLUMNS)
+                        else:
+                            df = btc_df
+                        # We don't have a separate metamask_symbols set yet, but we can add it if needed
+                        # For now, following the pattern of updating exodus_symbols
+                        exodus_symbols.update(btc_df["symbol"]) 
+                        print(f"Loaded {len(btc_balances)} MetaMask Bitcoin assets.")
+        except Exception as e:
+            print(f"Error fetching MetaMask Bitcoin balances: {e}")
 
     if df.empty:
         print("No positions found or unexpected API format.")
