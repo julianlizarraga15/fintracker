@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Fintracker | Job Health</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background-color: #05060a;
+        color: #f4f6fb;
+        --panel-bg: rgba(255, 255, 255, 0.04);
+        --panel-border: rgba(255, 255, 255, 0.08);
+        --muted: rgba(244, 246, 251, 0.65);
+        --accent: #72e4ff;
+        --success: #6bffa8;
+        --warning: #ffd66b;
+        --danger: #ff6b6b;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 20% -10%, rgba(114, 228, 255, 0.2), transparent 45%),
+          radial-gradient(circle at 80% 0%, rgba(107, 255, 168, 0.15), transparent 35%), #05060a;
+      }
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 40px 24px 80px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .panel {
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        padding: 24px;
+        backdrop-filter: blur(20px);
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      h1, h2 {
+        margin: 0;
+      }
+      a {
+        color: var(--accent);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+      }
+      .metric {
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .label {
+        display: block;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .value {
+        font-size: 1.35rem;
+        font-weight: 700;
+      }
+      .status {
+        display: inline-flex;
+        border-radius: 999px;
+        padding: 7px 12px;
+        border: 1px solid var(--panel-border);
+        font-weight: 700;
+      }
+      .status[data-status="success"] {
+        color: var(--success);
+        border-color: rgba(107, 255, 168, 0.5);
+      }
+      .status[data-status="failed"] {
+        color: var(--danger);
+        border-color: rgba(255, 107, 107, 0.5);
+      }
+      .status[data-status="unknown"] {
+        color: var(--warning);
+        border-color: rgba(255, 214, 107, 0.5);
+      }
+      form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      input {
+        border-radius: 14px;
+        border: 1px solid var(--panel-border);
+        padding: 14px 16px;
+        font-size: 1rem;
+        background: rgba(0, 0, 0, 0.25);
+        color: inherit;
+      }
+      button {
+        border: none;
+        border-radius: 14px;
+        padding: 14px 18px;
+        font-size: 1rem;
+        font-weight: 700;
+        background: linear-gradient(120deg, #7ef6de, #72e4ff);
+        color: #05111b;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+      th, td {
+        padding: 13px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: left;
+      }
+      thead {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .table-wrapper {
+        margin-top: 16px;
+        overflow: auto;
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+      }
+      .mono {
+        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      }
+      .list {
+        margin: 12px 0 0;
+        padding-left: 20px;
+      }
+      .warning {
+        color: var(--warning);
+      }
+      .danger {
+        color: var(--danger);
+      }
+      .success {
+        color: var(--success);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel header">
+        <div>
+          <h1>Job Health</h1>
+          <p class="muted">Structured status for the daily valuations job.</p>
+        </div>
+        <a href="/">Back to valuations</a>
+      </section>
+
+      <section class="panel">
+        <form id="login-form">
+          <input id="username" autocomplete="username" placeholder="Username" required />
+          <input id="password" type="password" autocomplete="current-password" placeholder="Password" required />
+          <button id="login-button" type="submit">Log in & load</button>
+        </form>
+        <p id="feedback" class="muted">Sign in to load job status.</p>
+      </section>
+
+      <section class="panel">
+        <div class="header">
+          <h2>Latest run</h2>
+          <button id="refresh-button" type="button">Refresh</button>
+        </div>
+        <div class="grid" style="margin-top: 18px">
+          <div class="metric"><span class="label">Status</span><div id="latest-status" class="status" data-status="unknown">Unknown</div></div>
+          <div class="metric"><span class="label">Started</span><div id="latest-started" class="value">—</div></div>
+          <div class="metric"><span class="label">Duration</span><div id="latest-duration" class="value">—</div></div>
+          <div class="metric"><span class="label">Positions</span><div id="latest-positions" class="value">—</div></div>
+          <div class="metric"><span class="label">S3 upload</span><div id="latest-s3" class="value">—</div></div>
+          <div class="metric"><span class="label">Warnings</span><div id="latest-warnings-count" class="value">—</div></div>
+        </div>
+        <div id="latest-details" class="muted" style="margin-top: 18px">No run loaded yet.</div>
+      </section>
+
+      <section class="panel">
+        <h2>Run history</h2>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Positions</th>
+                <th>Warnings</th>
+                <th>Errors</th>
+                <th>S3</th>
+              </tr>
+            </thead>
+            <tbody id="history-body">
+              <tr><td colspan="7" class="muted">No history loaded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const dom = {
+        loginForm: document.getElementById("login-form"),
+        username: document.getElementById("username"),
+        password: document.getElementById("password"),
+        loginButton: document.getElementById("login-button"),
+        refreshButton: document.getElementById("refresh-button"),
+        feedback: document.getElementById("feedback"),
+        latestStatus: document.getElementById("latest-status"),
+        latestStarted: document.getElementById("latest-started"),
+        latestDuration: document.getElementById("latest-duration"),
+        latestPositions: document.getElementById("latest-positions"),
+        latestS3: document.getElementById("latest-s3"),
+        latestWarningsCount: document.getElementById("latest-warnings-count"),
+        latestDetails: document.getElementById("latest-details"),
+        historyBody: document.getElementById("history-body"),
+      };
+
+      const authState = { token: null, expiresAt: 0 };
+
+      function setFeedback(message, tone = "muted") {
+        dom.feedback.className = tone;
+        dom.feedback.textContent = message;
+      }
+
+      function hasToken() {
+        return Boolean(authState.token && authState.expiresAt > Date.now());
+      }
+
+      function headers() {
+        return hasToken() ? { Authorization: `Bearer ${authState.token}` } : {};
+      }
+
+      function formatDateTime(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      }
+
+      function formatDuration(value) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+        return `${Number(value).toFixed(1)}s`;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
+      }
+
+      async function api(path) {
+        const response = await fetch(path, { headers: headers() });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.detail || `Request failed with status ${response.status}`);
+        }
+        return payload;
+      }
+
+      async function login(username, password) {
+        dom.loginButton.disabled = true;
+        setFeedback("Authenticating…");
+        try {
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.detail || "Login failed.");
+          authState.token = payload.access_token;
+          authState.expiresAt = Date.now() + (Number(payload.expires_in) || 0) * 1000;
+          dom.password.value = "";
+          setFeedback("Authenticated. Loading job dashboard…", "success");
+          await loadDashboard();
+        } catch (error) {
+          authState.token = null;
+          setFeedback(error.message || "Could not authenticate.", "danger");
+        } finally {
+          dom.loginButton.disabled = false;
+        }
+      }
+
+      function renderLatest(run) {
+        const status = run.status || "unknown";
+        dom.latestStatus.textContent = status === "success" ? "Success" : status === "failed" ? "Failed" : status;
+        dom.latestStatus.dataset.status = status;
+        dom.latestStarted.textContent = formatDateTime(run.started_at);
+        dom.latestDuration.textContent = formatDuration(run.duration_seconds);
+        dom.latestPositions.textContent = run.positions_count ?? "—";
+        dom.latestS3.textContent = run.s3_uploaded ? "Uploaded" : "No";
+        dom.latestS3.className = run.s3_uploaded ? "value success" : "value warning";
+        const warnings = Array.isArray(run.warnings) ? run.warnings : [];
+        const errors = Array.isArray(run.errors) ? run.errors : [];
+        dom.latestWarningsCount.textContent = warnings.length;
+
+        const loaded = run.loaded || {};
+        const pricing = run.pricing || {};
+        const outputs = run.outputs || {};
+        dom.latestDetails.innerHTML = `
+          <div><strong>Run id:</strong> <span class="mono">${escapeHtml(run.run_id)}</span></div>
+          <div><strong>Loaded:</strong> ${escapeHtml(Object.entries(loaded).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div>
+          <div><strong>Pricing:</strong> ${escapeHtml(Object.entries(pricing).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div>
+          <div><strong>Outputs:</strong> ${escapeHtml(Object.keys(outputs).join(", ") || "—")}</div>
+          ${warnings.length ? `<div class="warning"><strong>Warnings</strong><ul class="list">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : ""}
+          ${errors.length ? `<div class="danger"><strong>Errors</strong><ul class="list">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>` : ""}
+        `;
+      }
+
+      function renderHistory(rows) {
+        if (!Array.isArray(rows) || !rows.length) {
+          dom.historyBody.innerHTML = `<tr><td colspan="7" class="muted">No recorded runs found.</td></tr>`;
+          return;
+        }
+        dom.historyBody.innerHTML = rows
+          .map((row) => {
+            const status = row.status || "unknown";
+            return `
+              <tr>
+                <td><div>${formatDateTime(row.started_at)}</div><div class="muted mono">${escapeHtml(row.run_id)}</div></td>
+                <td><span class="status" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+                <td>${formatDuration(row.duration_seconds)}</td>
+                <td>${row.positions_count ?? "—"}</td>
+                <td>${row.warnings_count ?? 0}</td>
+                <td>${row.errors_count ?? 0}</td>
+                <td>${row.s3_uploaded ? "✅" : "—"}</td>
+              </tr>`;
+          })
+          .join("");
+      }
+
+      async function loadDashboard() {
+        if (!hasToken()) {
+          setFeedback("Log in to load job status.", "warning");
+          return;
+        }
+        dom.refreshButton.disabled = true;
+        try {
+          const [latest, history] = await Promise.all([
+            api("/api/jobs/valuations/latest"),
+            api("/api/jobs/valuations/history?limit=14"),
+          ]);
+          renderLatest(latest);
+          renderHistory(history);
+          setFeedback("Dashboard loaded.", "success");
+        } catch (error) {
+          setFeedback(error.message || "Failed to load dashboard.", "danger");
+        } finally {
+          dom.refreshButton.disabled = false;
+        }
+      }
+
+      dom.loginForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        login(dom.username.value.trim(), dom.password.value);
+      });
+      dom.refreshButton.addEventListener("click", loadDashboard);
+    </script>
+  </body>
+</html>
