@@ -215,3 +215,4 @@ AGENTS.md
 
 # TLS assets deployed to nginx container
 tls/
+.aider*
