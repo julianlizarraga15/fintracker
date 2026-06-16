@@ -12,4 +12,4 @@ if [[ -f .env ]]; then
   set +o allexport
 fi
 
-python -m backend.core.daily_snapshot
+exec /app/scripts/run_valuations_with_status.sh

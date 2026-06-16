@@ -21,6 +21,7 @@ def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
     monkeypatch.setattr(daily_snapshot, "IOL_USERNAME", "user")
     monkeypatch.setattr(daily_snapshot, "IOL_PASSWORD", "pass")
     monkeypatch.setattr(daily_snapshot, "ENABLE_BINANCE", True)
+    monkeypatch.setattr(daily_snapshot, "BINANCE_BALANCE_LAMBDA", None)
     monkeypatch.setattr(daily_snapshot, "BINANCE_API_KEY", "key")
     monkeypatch.setattr(daily_snapshot, "BINANCE_API_SECRET", "secret")
     monkeypatch.setattr(daily_snapshot, "ACCOUNT_ID", "acct-1")

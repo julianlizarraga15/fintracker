@@ -51,6 +51,22 @@
         gap: 16px;
       }
 
+      .app-links {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .app-links a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .app-links a:hover {
+        text-decoration: underline;
+      }
+
       h1 {
         margin: 0;
         font-size: 2rem;
@@ -490,7 +506,10 @@
           <div>
             <h1>Fintracker</h1>
           </div>
-          <div class="status-chip" id="status-chip" data-state="idle">Idle</div>
+          <div class="app-links">
+            <a href="/jobs.html">Job health</a>
+            <div class="status-chip" id="status-chip" data-state="idle">Idle</div>
+          </div>
         </div>
       </section>
 
