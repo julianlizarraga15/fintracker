@@ -56,8 +56,15 @@ def _log_snapshot_paths(resource: str, info: dict) -> None:
     parquet_path = info.get("parquet")
     if csv_path:
         print(f"[{resource}] CSV saved -> {csv_path}")
+        _log_job_detail({"event": "output_saved", "resource": resource, "file_type": "csv", "path": csv_path})
     if parquet_path:
         print(f"[{resource}] Parquet saved -> {parquet_path}")
+        _log_job_detail({"event": "output_saved", "resource": resource, "file_type": "parquet", "path": parquet_path})
+
+
+def _log_job_detail(payload: dict[str, Any]) -> None:
+    """Emit a machine-readable line for the jobs dashboard parser."""
+    print(f"[job-detail] {json.dumps(payload, sort_keys=True)}")
 
 BASE_CURRENCY = "USD"
 
@@ -511,8 +518,49 @@ def main():
     if binance_price_models:
         prices.extend(binance_price_models)
         print(f"Priced {len(binance_price_models)} Binance assets (missing {len(binance_missing_symbols)}).")
+        _log_job_detail(
+            {
+                "event": "source_counts",
+                "source": "binance",
+                "loaded": len(binance_symbols),
+                "priced": len(binance_price_models),
+                "missing": len(binance_missing_symbols),
+            }
+        )
+        if binance_missing_symbols:
+            missing_display = ", ".join(sorted(binance_missing_symbols))
+            print(f"Missing Binance prices: {missing_display}")
+            for symbol in sorted(binance_missing_symbols):
+                _log_job_detail(
+                    {
+                        "event": "pricing_issue",
+                        "source": "binance",
+                        "symbol": symbol,
+                        "issue_type": "missing_price",
+                        "details": "No Binance USDT/USD ticker price was available after configured fallbacks.",
+                    }
+                )
     elif binance_symbols:
         print("No Binance prices fetched.")
+        _log_job_detail(
+            {
+                "event": "source_counts",
+                "source": "binance",
+                "loaded": len(binance_symbols),
+                "priced": 0,
+                "missing": len(binance_symbols),
+            }
+        )
+        for symbol in sorted(binance_symbols):
+            _log_job_detail(
+                {
+                    "event": "pricing_issue",
+                    "source": "binance",
+                    "symbol": symbol,
+                    "issue_type": "missing_price",
+                    "details": "No Binance prices were fetched for this run.",
+                }
+            )
 
     # Fetch prices for Ethereum assets if not already fetched
     if ethereum_symbols:

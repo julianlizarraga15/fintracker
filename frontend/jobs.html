@@ -159,6 +159,60 @@
       .success {
         color: var(--success);
       }
+      .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .detail-card {
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        min-width: 0;
+      }
+      .path-list {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0 0;
+      }
+      .path-list li {
+        overflow-wrap: anywhere;
+        margin-top: 8px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .chip {
+        border: 1px solid rgba(255, 214, 107, 0.45);
+        color: var(--warning);
+        border-radius: 999px;
+        padding: 5px 10px;
+        background: rgba(255, 214, 107, 0.08);
+        font-weight: 700;
+      }
+      @media (max-width: 720px) {
+        .app {
+          padding: 24px 12px 60px;
+        }
+        .panel {
+          padding: 18px;
+        }
+        .header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .table-wrapper {
+          overflow-x: auto;
+        }
+        table {
+          min-width: 760px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -190,8 +244,8 @@
           <div class="metric"><span class="label">Started</span><div id="latest-started" class="value">—</div></div>
           <div class="metric"><span class="label">Duration</span><div id="latest-duration" class="value">—</div></div>
           <div class="metric"><span class="label">Positions</span><div id="latest-positions" class="value">—</div></div>
-          <div class="metric"><span class="label">S3 upload</span><div id="latest-s3" class="value">—</div></div>
           <div class="metric"><span class="label">Warnings</span><div id="latest-warnings-count" class="value">—</div></div>
+          <div class="metric"><span class="label">Missing prices</span><div id="latest-missing-count" class="value">—</div></div>
         </div>
         <div id="latest-details" class="muted" style="margin-top: 18px">No run loaded yet.</div>
       </section>
@@ -208,7 +262,7 @@
                 <th>Positions</th>
                 <th>Warnings</th>
                 <th>Errors</th>
-                <th>S3</th>
+                <th>Missing prices</th>
               </tr>
             </thead>
             <tbody id="history-body">
@@ -231,8 +285,8 @@
         latestStarted: document.getElementById("latest-started"),
         latestDuration: document.getElementById("latest-duration"),
         latestPositions: document.getElementById("latest-positions"),
-        latestS3: document.getElementById("latest-s3"),
         latestWarningsCount: document.getElementById("latest-warnings-count"),
+        latestMissingCount: document.getElementById("latest-missing-count"),
         latestDetails: document.getElementById("latest-details"),
         historyBody: document.getElementById("history-body"),
       };
@@ -301,6 +355,34 @@
         }
       }
 
+      function groupIssuesBySource(issues) {
+        return issues.reduce((acc, issue) => {
+          const source = issue.source || "unknown";
+          if (!acc[source]) acc[source] = [];
+          acc[source].push(issue);
+          return acc;
+        }, {});
+      }
+
+      function renderOutputs(outputs) {
+        const entries = Object.entries(outputs || {});
+        if (!entries.length) return `<p class="muted">No generated files recorded.</p>`;
+        return `<ul class="path-list">${entries.map(([resource, files]) => {
+          const fileLinks = Object.entries(files || {}).map(([kind, path]) => `<li><strong>${escapeHtml(resource)} ${escapeHtml(kind)}:</strong> <span class="mono">${escapeHtml(path)}</span></li>`).join("");
+          return fileLinks;
+        }).join("")}</ul>`;
+      }
+
+      function renderPricingIssues(issues) {
+        if (!issues.length) return `<p class="success">No pricing issues recorded.</p>`;
+        const groups = groupIssuesBySource(issues);
+        return Object.entries(groups).map(([source, rows]) => `
+          <div style="margin-top: 10px">
+            <strong>${escapeHtml(source)}</strong> <span class="muted">${rows.length} missing</span>
+            <div class="chips">${rows.map((issue) => `<span class="chip" title="${escapeHtml(issue.details || issue.issue_type || "missing_price")}">${escapeHtml(issue.symbol)}</span>`).join("")}</div>
+          </div>`).join("");
+      }
+
       function renderLatest(run) {
         const status = run.status || "unknown";
         dom.latestStatus.textContent = status === "success" ? "Success" : status === "failed" ? "Failed" : status;
@@ -308,8 +390,6 @@
         dom.latestStarted.textContent = formatDateTime(run.started_at);
         dom.latestDuration.textContent = formatDuration(run.duration_seconds);
         dom.latestPositions.textContent = run.positions_count ?? "—";
-        dom.latestS3.textContent = run.s3_uploaded ? "Uploaded" : "No";
-        dom.latestS3.className = run.s3_uploaded ? "value success" : "value warning";
         const warnings = Array.isArray(run.warnings) ? run.warnings : [];
         const errors = Array.isArray(run.errors) ? run.errors : [];
         dom.latestWarningsCount.textContent = warnings.length;
@@ -317,13 +397,18 @@
         const loaded = run.loaded || {};
         const pricing = run.pricing || {};
         const outputs = run.outputs || {};
+        const issues = Array.isArray(run.pricing_issues) ? run.pricing_issues : [];
+        dom.latestMissingCount.textContent = issues.length;
         dom.latestDetails.innerHTML = `
           <div><strong>Run id:</strong> <span class="mono">${escapeHtml(run.run_id)}</span></div>
-          <div><strong>Loaded:</strong> ${escapeHtml(Object.entries(loaded).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div>
-          <div><strong>Pricing:</strong> ${escapeHtml(Object.entries(pricing).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div>
-          <div><strong>Outputs:</strong> ${escapeHtml(Object.keys(outputs).join(", ") || "—")}</div>
-          ${warnings.length ? `<div class="warning"><strong>Warnings</strong><ul class="list">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : ""}
-          ${errors.length ? `<div class="danger"><strong>Errors</strong><ul class="list">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>` : ""}
+          <div class="details-grid">
+            <div class="detail-card"><strong>Loaded by source</strong><div class="muted" style="margin-top: 10px">${escapeHtml(Object.entries(loaded).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div></div>
+            <div class="detail-card"><strong>Pricing counts</strong><div class="muted" style="margin-top: 10px">${escapeHtml(Object.entries(pricing).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div></div>
+            <div class="detail-card"><strong>Generated outputs</strong>${renderOutputs(outputs)}</div>
+            <div class="detail-card"><strong>Pricing issues</strong>${renderPricingIssues(issues)}</div>
+          </div>
+          ${warnings.length ? `<div class="warning" style="margin-top: 16px"><strong>Warnings</strong><ul class="list">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></div>` : ""}
+          ${errors.length ? `<div class="danger" style="margin-top: 16px"><strong>Errors</strong><ul class="list">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul></div>` : ""}
         `;
       }
 
@@ -343,7 +428,7 @@
                 <td>${row.positions_count ?? "—"}</td>
                 <td>${row.warnings_count ?? 0}</td>
                 <td>${row.errors_count ?? 0}</td>
-                <td>${row.s3_uploaded ? "✅" : "—"}</td>
+                <td>${row.missing_prices_count ?? 0}</td>
               </tr>`;
           })
           .join("");
