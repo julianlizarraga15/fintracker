@@ -830,8 +830,33 @@
         return mode === "adjusted" ? "adjusted" : "raw";
       }
 
+      function pricesDiffer(left, right) {
+        return (
+          left !== null &&
+          left !== undefined &&
+          right !== null &&
+          right !== undefined &&
+          Number(left) !== Number(right)
+        );
+      }
+
+      function hasPriceAdjustments(history) {
+        if (history?.has_adjustments !== undefined) {
+          return Boolean(history.has_adjustments);
+        }
+        return Array.isArray(history?.prices)
+          ? history.prices.some((point) =>
+              pricesDiffer(point.price_adjusted, point.price_raw) ||
+              pricesDiffer(point.price_base_adjusted, point.price_base_raw)
+            )
+          : false;
+      }
+
       function defaultSeriesMode(history) {
-        return normalizeSeriesMode(history?.default_series);
+        if (history?.default_series !== undefined) {
+          return normalizeSeriesMode(history.default_series);
+        }
+        return hasPriceAdjustments(history) ? "adjusted" : "raw";
       }
 
       function valuesForHistory(history, useBaseCurrency = true, seriesMode = "raw") {
@@ -1334,7 +1359,7 @@
           ? "Show native currency"
           : `Show ${baseLabel}`;
         dom.historyModalToggle.disabled = toggleDisabled;
-        const hasAdjustments = Boolean(history.has_adjustments);
+        const hasAdjustments = hasPriceAdjustments(history);
         dom.historyModalSeriesToggle.hidden = !hasAdjustments;
         dom.historyModalSeriesToggle.disabled = !hasAdjustments;
         dom.historyModalSeriesToggle.textContent = seriesMode === "adjusted" ? "Show raw values" : "Show adjusted values";
@@ -1529,7 +1554,7 @@
         renderHistoryModal();
       });
       dom.historyModalSeriesToggle.addEventListener("click", () => {
-        if (!chartState.history || dom.historyModalSeriesToggle.disabled || !chartState.history.has_adjustments) return;
+        if (!chartState.history || dom.historyModalSeriesToggle.disabled || !hasPriceAdjustments(chartState.history)) return;
         chartState.seriesMode = normalizeSeriesMode(chartState.seriesMode) === "adjusted" ? "raw" : "adjusted";
         renderHistoryModal();
       });
