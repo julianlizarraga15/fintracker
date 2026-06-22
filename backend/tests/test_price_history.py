@@ -25,10 +25,19 @@ def _write_fx(fx_dir: Path, dt_value: date, rows: list[dict], nested: bool = Fal
     df.to_csv(dt_dir / f"fx_{dt_value.isoformat()}.csv", index=False)
 
 
-def test_price_history_prefers_best_quality_and_converts_fx(tmp_path, monkeypatch):
-    prices_history.clear_cache()
+@pytest.fixture
+def snapshot_dirs(tmp_path, monkeypatch):
     prices_dir = tmp_path / "prices"
     fx_dir = tmp_path / "fx"
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
+    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
+    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
+    return prices_dir, fx_dir
+
+
+def test_price_history_prefers_best_quality_and_converts_fx(snapshot_dirs):
+    prices_history.clear_cache()
+    prices_dir, fx_dir = snapshot_dirs
     today = date.today()
     previous = today - timedelta(days=1)
 
@@ -90,10 +99,6 @@ def test_price_history_prefers_best_quality_and_converts_fx(tmp_path, monkeypatc
         ],
     )
 
-    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
-    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
-    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
-
     response = prices_history.get_price_history("abc", days=5, base_currency="usd")
 
     assert response.base_currency == "USD"
@@ -109,10 +114,9 @@ def test_price_history_prefers_best_quality_and_converts_fx(tmp_path, monkeypatc
     assert response.prices[1].quality_score == 90
 
 
-def test_price_history_handles_missing_fx_and_caps_window(tmp_path, monkeypatch):
+def test_price_history_handles_missing_fx_and_caps_window(snapshot_dirs):
     prices_history.clear_cache()
-    prices_dir = tmp_path / "prices"
-    fx_dir = tmp_path / "fx"
+    prices_dir, fx_dir = snapshot_dirs
     today = date.today()
 
     _write_prices(
@@ -131,10 +135,6 @@ def test_price_history_handles_missing_fx_and_caps_window(tmp_path, monkeypatch)
         ],
     )
 
-    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
-    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
-    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
-
     response = prices_history.get_price_history("NFX", days=5000, base_currency="USD")
 
     assert response.window_days == prices_history.MAX_WINDOW_DAYS
@@ -143,10 +143,9 @@ def test_price_history_handles_missing_fx_and_caps_window(tmp_path, monkeypatch)
     assert response.prices[0].price_base is None
 
 
-def test_price_history_reads_nested_fx(tmp_path, monkeypatch):
+def test_price_history_reads_nested_fx(snapshot_dirs):
     prices_history.clear_cache()
-    prices_dir = tmp_path / "prices"
-    fx_dir = tmp_path / "fx"
+    prices_dir, fx_dir = snapshot_dirs
     today = date.today()
 
     _write_prices(
@@ -171,20 +170,15 @@ def test_price_history_reads_nested_fx(tmp_path, monkeypatch):
         nested=True,
     )
 
-    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
-    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
-    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
-
     response = prices_history.get_price_history("ARSX", days=3, base_currency="USD")
     assert response.points == 1
     assert response.missing_fx is False
     assert response.prices[0].price_base == pytest.approx(1.0)
 
 
-def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path, monkeypatch):
+def test_price_history_includes_raw_candidates_daily_change_and_outlier(snapshot_dirs):
     prices_history.clear_cache()
-    prices_dir = tmp_path / "prices"
-    fx_dir = tmp_path / "fx"
+    prices_dir, fx_dir = snapshot_dirs
     today = date.today()
     previous = today - timedelta(days=1)
 
@@ -240,10 +234,6 @@ def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path
         ],
     )
 
-    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
-    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
-    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
-
     response = prices_history.get_price_history("MOVE", days=2, base_currency="USD")
 
     assert response.points == 2
@@ -274,10 +264,9 @@ def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path
     assert raw_candidates[1].quality_score == 80
 
 
-def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tmp_path, monkeypatch):
+def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(snapshot_dirs, monkeypatch):
     prices_history.clear_cache()
-    prices_dir = tmp_path / "prices"
-    fx_dir = tmp_path / "fx"
+    prices_dir, fx_dir = snapshot_dirs
     previous = date(2026, 5, 29)
     effective = date(2026, 6, 1)
 
@@ -312,9 +301,6 @@ def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tm
         ],
     )
 
-    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
-    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
-    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
     fixed_date = type("FixedDate", (date,), {"today": classmethod(lambda cls: effective)})
     monkeypatch.setattr(prices_history, "date", fixed_date)
 
