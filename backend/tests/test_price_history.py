@@ -174,3 +174,72 @@ def test_price_history_reads_nested_fx(tmp_path, monkeypatch):
     assert response.points == 1
     assert response.missing_fx is False
     assert response.prices[0].price_base == pytest.approx(1.0)
+
+
+def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path, monkeypatch):
+    prices_history.clear_cache()
+    prices_dir = tmp_path / "prices"
+    fx_dir = tmp_path / "fx"
+    today = date.today()
+    previous = today - timedelta(days=1)
+
+    _write_prices(
+        prices_dir,
+        previous,
+        [
+            {
+                "asof_dt": previous.isoformat(),
+                "symbol": "MOVE",
+                "price": 100.0,
+                "currency": "USD",
+                "venue": "TEST1",
+                "source": "first",
+                "quality_score": 80,
+            }
+        ],
+    )
+    _write_prices(
+        prices_dir,
+        today,
+        [
+            {
+                "asof_dt": today.isoformat(),
+                "asof_ts": f"{today.isoformat()}T10:00:00Z",
+                "symbol": "MOVE",
+                "price": 120.0,
+                "currency": "USD",
+                "venue": "TEST1",
+                "source": "same_quality_older",
+                "quality_score": 80,
+            },
+            {
+                "asof_dt": today.isoformat(),
+                "asof_ts": f"{today.isoformat()}T12:00:00Z",
+                "symbol": "MOVE",
+                "price": 135.0,
+                "currency": "USD",
+                "venue": "TEST2",
+                "source": "same_quality_newer",
+                "quality_score": 80,
+            },
+        ],
+    )
+
+    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
+    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
+
+    response = prices_history.get_price_history("MOVE", days=2, base_currency="USD")
+
+    assert response.points == 2
+    assert response.prices[0].daily_change_pct is None
+    assert response.prices[0].is_outlier is False
+    assert len(response.prices[0].raw_candidates) == 1
+    assert response.prices[1].price == pytest.approx(135.0)
+    assert response.prices[1].daily_change_pct == pytest.approx(35.0)
+    assert response.prices[1].is_outlier is True
+    assert response.prices[1].outlier_reason == "daily_change_exceeds_threshold"
+    assert len(response.prices[1].raw_candidates) == 2
+    assert {candidate.source for candidate in response.prices[1].raw_candidates} == {
+        "same_quality_older",
+        "same_quality_newer",
+    }
