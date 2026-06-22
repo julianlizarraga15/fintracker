@@ -7,6 +7,7 @@ from time import time
 from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
+from backend.app.corporate_actions import CorporateAction, get_corporate_actions, parse_cedear_ratio
 from pydantic import BaseModel, Field
 
 SNAPSHOTS_ROOT = Path(os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions"))
@@ -38,6 +39,12 @@ class PriceHistoryPoint(BaseModel):
     price: float
     currency: str
     price_base: Optional[float] = None
+    price_raw: float
+    price_base_raw: Optional[float] = None
+    price_adjusted: float
+    price_base_adjusted: Optional[float] = None
+    is_known_event: bool = False
+    known_event_reason: Optional[str] = None
     source: Optional[str] = None
     venue: Optional[str] = None
     quality_score: Optional[int] = Field(None, ge=0, le=100)
@@ -258,6 +265,49 @@ def _pick_best_price_per_day(price_rows: Iterable[dict]) -> tuple[Dict[date, dic
     return best, candidates_by_day
 
 
+def _cedear_ratio_change_factor(action: CorporateAction, dt_value: date) -> Optional[float]:
+    old_ratio = parse_cedear_ratio(action.old_ratio)
+    new_ratio = parse_cedear_ratio(action.new_ratio)
+    if old_ratio is None or new_ratio in (None, 0):
+        return None
+    return old_ratio / new_ratio if dt_value < action.effective_date else 1.0
+
+
+def _find_ratio_action(actions: list[CorporateAction], dt_value: date) -> Optional[CorporateAction]:
+    applicable = [
+        action
+        for action in actions
+        if action.kind == "cedear_ratio_change" and parse_cedear_ratio(action.new_ratio) is not None
+    ]
+    if not applicable:
+        return None
+    past_actions = [action for action in applicable if dt_value >= action.effective_date]
+    if past_actions:
+        return max(past_actions, key=lambda action: action.effective_date)
+    return min(applicable, key=lambda action: action.effective_date)
+
+
+def _known_event_dates(actions: list[CorporateAction], available_dates: Iterable[date]) -> dict[date, str]:
+    event_dates: dict[date, str] = {}
+    sorted_dates = sorted(available_dates)
+    for action in actions:
+        if action.kind != "cedear_ratio_change":
+            continue
+        reason = action.description or (
+            f"{action.symbol} CEDEAR ratio changed from {action.old_ratio} to {action.new_ratio}"
+        )
+        adjacent = {dt for dt in sorted_dates if abs((dt - action.effective_date).days) <= 1}
+        previous_dates = [dt for dt in sorted_dates if dt < action.effective_date]
+        next_dates = [dt for dt in sorted_dates if dt >= action.effective_date]
+        if previous_dates:
+            adjacent.add(max(previous_dates))
+        if next_dates:
+            adjacent.add(min(next_dates))
+        for dt in adjacent:
+            event_dates[dt] = reason
+    return event_dates
+
+
 _CACHE: Dict[tuple[str, int, str], tuple[float, PriceHistoryResponse]] = {}
 
 
@@ -314,6 +364,9 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
     fx_rows = _load_fx_rows(earliest_dt - timedelta(days=FX_LOOKBACK_BUFFER_DAYS))
     fx_lookup = _build_fx_lookup(fx_rows)
 
+    actions = get_corporate_actions(symbol)
+    known_event_dates = _known_event_dates(actions, per_day.keys())
+
     prices: list[PriceHistoryPoint] = []
     missing_fx = False
     previous_display_price: Optional[float] = None
@@ -331,13 +384,24 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
             else:
                 price_base = price_value * rate
 
-        display_price = price_base if price_base is not None else price_value
+        action = _find_ratio_action(actions, dt_value)
+        adjustment_factor = _cedear_ratio_change_factor(action, dt_value) if action else None
+        price_adjusted = price_value * adjustment_factor if adjustment_factor is not None else price_value
+        price_base_adjusted = (
+            price_base * adjustment_factor
+            if adjustment_factor is not None and price_base is not None
+            else price_base
+        )
+        display_price = price_base_adjusted if price_base_adjusted is not None else price_adjusted
+        is_known_event = dt_value in known_event_dates
+        known_event_reason = known_event_dates.get(dt_value)
+
         daily_change_pct = None
         is_outlier = False
         outlier_reason = None
         if previous_display_price not in (None, 0) and display_price is not None:
             daily_change_pct = ((display_price - previous_display_price) / previous_display_price) * 100
-            if abs(daily_change_pct) > OUTLIER_DAILY_CHANGE_THRESHOLD_PCT:
+            if abs(daily_change_pct) > OUTLIER_DAILY_CHANGE_THRESHOLD_PCT and not is_known_event:
                 is_outlier = True
                 outlier_reason = "daily_change_exceeds_threshold"
         previous_display_price = display_price
@@ -348,9 +412,15 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
             PriceHistoryPoint(
                 asof_dt=dt_value,
                 asof_ts=row.get("asof_ts"),
-                price=price_value,
+                price=price_adjusted,
                 currency=currency,
-                price_base=price_base,
+                price_base=price_base_adjusted,
+                price_raw=price_value,
+                price_base_raw=price_base,
+                price_adjusted=price_adjusted,
+                price_base_adjusted=price_base_adjusted,
+                is_known_event=is_known_event,
+                known_event_reason=known_event_reason,
                 source=row.get("source"),
                 venue=row.get("venue"),
                 quality_score=_safe_int(row.get("quality_score")),
