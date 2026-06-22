@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -90,6 +90,7 @@ def test_price_history_prefers_best_quality_and_converts_fx(tmp_path, monkeypatc
         ],
     )
 
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
     monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
     monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
 
@@ -99,6 +100,8 @@ def test_price_history_prefers_best_quality_and_converts_fx(tmp_path, monkeypatc
     assert response.window_days == 5
     assert response.points == 2
     assert response.missing_fx is False
+    assert response.has_adjustments is False
+    assert response.default_series == "raw"
     assert response.prices[0].asof_dt == previous
     assert response.prices[0].price_base == pytest.approx(20.0)
     assert response.prices[1].price == pytest.approx(105.0)
@@ -128,6 +131,7 @@ def test_price_history_handles_missing_fx_and_caps_window(tmp_path, monkeypatch)
         ],
     )
 
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
     monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
     monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
 
@@ -167,6 +171,7 @@ def test_price_history_reads_nested_fx(tmp_path, monkeypatch):
         nested=True,
     )
 
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
     monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
     monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
 
@@ -222,9 +227,20 @@ def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path
                 "source": "same_quality_newer",
                 "quality_score": 80,
             },
+            {
+                "asof_dt": today.isoformat(),
+                "asof_ts": f"{today.isoformat()}T13:00:00Z",
+                "symbol": "MOVE",
+                "price": "",
+                "currency": "USD",
+                "venue": "TEST3",
+                "source": "invalid_missing_price",
+                "quality_score": 100,
+            },
         ],
     )
 
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
     monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
     monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
 
@@ -239,10 +255,23 @@ def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path
     assert response.prices[1].is_outlier is True
     assert response.prices[1].outlier_reason == "daily_change_exceeds_threshold"
     assert len(response.prices[1].raw_candidates) == 2
-    assert {candidate.source for candidate in response.prices[1].raw_candidates} == {
+    raw_candidates = response.prices[1].raw_candidates
+    assert [candidate.source for candidate in raw_candidates] == [
         "same_quality_older",
         "same_quality_newer",
-    }
+    ]
+    assert raw_candidates[0].asof_dt == today
+    assert raw_candidates[0].asof_ts == datetime(today.year, today.month, today.day, 10, tzinfo=timezone.utc)
+    assert raw_candidates[0].price == pytest.approx(120.0)
+    assert raw_candidates[0].currency == "USD"
+    assert raw_candidates[0].venue == "TEST1"
+    assert raw_candidates[0].quality_score == 80
+    assert raw_candidates[1].asof_dt == today
+    assert raw_candidates[1].asof_ts == datetime(today.year, today.month, today.day, 12, tzinfo=timezone.utc)
+    assert raw_candidates[1].price == pytest.approx(135.0)
+    assert raw_candidates[1].currency == "USD"
+    assert raw_candidates[1].venue == "TEST2"
+    assert raw_candidates[1].quality_score == 80
 
 
 def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tmp_path, monkeypatch):
@@ -283,6 +312,7 @@ def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tm
         ],
     )
 
+    monkeypatch.setattr(prices_history, "SNAPSHOTS_ROOT", tmp_path)
     monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
     monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
     fixed_date = type("FixedDate", (date,), {"today": classmethod(lambda cls: effective)})
@@ -291,15 +321,21 @@ def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tm
     response = prices_history.get_price_history("SPY", days=4, base_currency="ARS")
 
     assert response.points == 2
+    assert response.has_adjustments is True
+    assert response.default_series == "adjusted"
     assert response.prices[0].price_raw == pytest.approx(60000.0)
     assert response.prices[0].price_adjusted == pytest.approx(20000.0)
     assert response.prices[0].price == pytest.approx(20000.0)
     assert response.prices[0].price_base_raw == pytest.approx(60000.0)
     assert response.prices[0].price_base_adjusted == pytest.approx(20000.0)
     assert response.prices[1].price_raw == pytest.approx(20000.0)
+    assert response.prices[0].price_raw / response.prices[1].price_raw == pytest.approx(3.0)
     assert response.prices[1].price_adjusted == pytest.approx(20000.0)
+    adjusted_change_ratio = response.prices[1].price_adjusted / response.prices[0].price_adjusted
+    assert adjusted_change_ratio == pytest.approx(1.0, abs=0.01)
     assert response.prices[1].daily_change_pct == pytest.approx(0.0)
     assert response.prices[1].is_outlier is False
     assert response.prices[1].outlier_reason is None
     assert all(point.is_known_event for point in response.prices)
+    assert all(point.is_outlier is False for point in response.prices)
     assert response.prices[1].known_event_reason == "SPY CEDEAR ratio changed from 20:1 to 60:1"

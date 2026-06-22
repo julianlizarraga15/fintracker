@@ -4,7 +4,7 @@ import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import time
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Literal, Optional
 
 import pandas as pd
 from backend.app.corporate_actions import CorporateAction, get_corporate_actions, parse_cedear_ratio
@@ -59,6 +59,8 @@ class PriceHistoryResponse(BaseModel):
     window_days: int
     points: int
     missing_fx: bool = False
+    has_adjustments: bool = False
+    default_series: Literal["raw", "adjusted"] = "raw"
     prices: List[PriceHistoryPoint]
 
 
@@ -369,6 +371,7 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
 
     prices: list[PriceHistoryPoint] = []
     missing_fx = False
+    has_adjustments = False
     previous_display_price: Optional[float] = None
     for dt_value in sorted(per_day.keys()):
         row = per_day[dt_value]
@@ -386,6 +389,8 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
 
         action = _find_ratio_action(actions, dt_value)
         adjustment_factor = _cedear_ratio_change_factor(action, dt_value) if action else None
+        if adjustment_factor is not None and adjustment_factor != 1.0:
+            has_adjustments = True
         price_adjusted = price_value * adjustment_factor if adjustment_factor is not None else price_value
         price_base_adjusted = (
             price_base * adjustment_factor
@@ -436,6 +441,8 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
         window_days=window_days,
         points=len(prices),
         missing_fx=missing_fx,
+        has_adjustments=has_adjustments,
+        default_series="adjusted" if has_adjustments else "raw",
         prices=prices,
     )
     _set_cached(cache_key, response)
