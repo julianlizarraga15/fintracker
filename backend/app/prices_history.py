@@ -4,7 +4,7 @@ import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import time
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -19,6 +19,17 @@ CACHE_TTL_SECONDS = 45
 FX_LOOKBACK_BUFFER_DAYS = 7
 FX_DEFAULT_MAX_AGE_DAYS = 3
 DEFAULT_BASE_CURRENCY = os.getenv("VALUATIONS_BASE_CURRENCY", "USD").upper()
+OUTLIER_DAILY_CHANGE_THRESHOLD_PCT = 30.0
+
+
+class RawPriceCandidate(BaseModel):
+    asof_dt: date
+    price: float
+    currency: str
+    source: Optional[str] = None
+    venue: Optional[str] = None
+    quality_score: Optional[int] = Field(None, ge=0, le=100)
+    asof_ts: Optional[datetime] = None
 
 
 class PriceHistoryPoint(BaseModel):
@@ -30,6 +41,10 @@ class PriceHistoryPoint(BaseModel):
     source: Optional[str] = None
     venue: Optional[str] = None
     quality_score: Optional[int] = Field(None, ge=0, le=100)
+    daily_change_pct: Optional[float] = None
+    is_outlier: bool = False
+    outlier_reason: Optional[str] = None
+    raw_candidates: list[RawPriceCandidate] = Field(default_factory=list)
 
 
 class PriceHistoryResponse(BaseModel):
@@ -193,66 +208,54 @@ def _resolve_fx_rate(
     return None
 
 
-def _pick_best_price_per_day(price_rows: Iterable[dict]) -> Dict[date, dict]:
+def _price_candidate_from_row(row: dict) -> Optional[dict]:
+    try:
+        asof_dt = _parse_date(row.get("asof_dt"))
+    except Exception:
+        return None
+    price_value = _safe_float(row.get("price"))
+    currency = row.get("currency")
+    if price_value is None or not currency:
+        return None
+    return {
+        "asof_dt": asof_dt,
+        "asof_ts": _parse_datetime(row.get("asof_ts") or row.get("valid_from_ts")),
+        "price": price_value,
+        "currency": str(currency).upper(),
+        "source": row.get("source"),
+        "venue": row.get("venue"),
+        "quality_score": _safe_int(row.get("quality_score")) or 0,
+    }
+
+
+def _is_better_price_candidate(candidate: dict, current: dict) -> bool:
+    candidate_quality = _safe_int(candidate.get("quality_score")) or 0
+    current_quality = _safe_int(current.get("quality_score")) or 0
+    if candidate_quality != current_quality:
+        return candidate_quality > current_quality
+
+    candidate_ts = candidate.get("asof_ts")
+    current_ts = current.get("asof_ts")
+    if candidate_ts and current_ts:
+        return candidate_ts > current_ts
+    return bool(candidate_ts and not current_ts)
+
+
+def _pick_best_price_per_day(price_rows: Iterable[dict]) -> tuple[Dict[date, dict], Dict[date, list[dict]]]:
     best: Dict[date, dict] = {}
+    candidates_by_day: Dict[date, list[dict]] = {}
     for row in price_rows:
-        try:
-            asof_dt = _parse_date(row.get("asof_dt"))
-        except Exception:
-            continue
-        price_value = _safe_float(row.get("price"))
-        currency = row.get("currency")
-        if price_value is None or not currency:
-            continue
-        quality = _safe_int(row.get("quality_score")) or 0
-        asof_ts = _parse_datetime(row.get("asof_ts") or row.get("valid_from_ts"))
-        current = best.get(asof_dt)
-        if current is None:
-            best[asof_dt] = {
-                "asof_dt": asof_dt,
-                "asof_ts": asof_ts,
-                "price": price_value,
-                "currency": currency,
-                "source": row.get("source"),
-                "venue": row.get("venue"),
-                "quality_score": quality,
-            }
+        candidate = _price_candidate_from_row(row)
+        if candidate is None:
             continue
 
-        current_quality = _safe_int(current.get("quality_score")) or 0
-        if quality > current_quality:
-            best[asof_dt] = {
-                "asof_dt": asof_dt,
-                "asof_ts": asof_ts,
-                "price": price_value,
-                "currency": currency,
-                "source": row.get("source"),
-                "venue": row.get("venue"),
-                "quality_score": quality,
-            }
-        elif quality == current_quality:
-            if asof_ts and current.get("asof_ts"):
-                if asof_ts > current["asof_ts"]:
-                    best[asof_dt] = {
-                        "asof_dt": asof_dt,
-                        "asof_ts": asof_ts,
-                        "price": price_value,
-                        "currency": currency,
-                        "source": row.get("source"),
-                        "venue": row.get("venue"),
-                        "quality_score": quality,
-                    }
-            elif asof_ts and not current.get("asof_ts"):
-                best[asof_dt] = {
-                    "asof_dt": asof_dt,
-                    "asof_ts": asof_ts,
-                    "price": price_value,
-                    "currency": currency,
-                    "source": row.get("source"),
-                    "venue": row.get("venue"),
-                    "quality_score": quality,
-                }
-    return best
+        asof_dt = candidate["asof_dt"]
+        candidates_by_day.setdefault(asof_dt, []).append(candidate)
+        current = best.get(asof_dt)
+        if current is None or _is_better_price_candidate(candidate, current):
+            best[asof_dt] = candidate
+
+    return best, candidates_by_day
 
 
 _CACHE: Dict[tuple[str, int, str], tuple[float, PriceHistoryResponse]] = {}
@@ -292,7 +295,9 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
 
     window_start = date.today() - timedelta(days=window_days - 1)
     price_rows = _load_price_rows(symbol, window_start)
-    per_day = {dt: row for dt, row in _pick_best_price_per_day(price_rows).items() if dt >= window_start}
+    best_per_day, candidates_by_day = _pick_best_price_per_day(price_rows)
+    per_day = {dt: row for dt, row in best_per_day.items() if dt >= window_start}
+    candidates_by_day = {dt: rows for dt, rows in candidates_by_day.items() if dt >= window_start}
 
     if not per_day:
         response = PriceHistoryResponse(
@@ -311,6 +316,7 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
 
     prices: list[PriceHistoryPoint] = []
     missing_fx = False
+    previous_display_price: Optional[float] = None
     for dt_value in sorted(per_day.keys()):
         row = per_day[dt_value]
         currency = (row.get("currency") or "").upper()
@@ -325,6 +331,19 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
             else:
                 price_base = price_value * rate
 
+        display_price = price_base if price_base is not None else price_value
+        daily_change_pct = None
+        is_outlier = False
+        outlier_reason = None
+        if previous_display_price not in (None, 0) and display_price is not None:
+            daily_change_pct = ((display_price - previous_display_price) / previous_display_price) * 100
+            if abs(daily_change_pct) > OUTLIER_DAILY_CHANGE_THRESHOLD_PCT:
+                is_outlier = True
+                outlier_reason = "daily_change_exceeds_threshold"
+        previous_display_price = display_price
+
+        raw_candidates = [RawPriceCandidate(**candidate) for candidate in candidates_by_day.get(dt_value, [])]
+
         prices.append(
             PriceHistoryPoint(
                 asof_dt=dt_value,
@@ -335,6 +354,10 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
                 source=row.get("source"),
                 venue=row.get("venue"),
                 quality_score=_safe_int(row.get("quality_score")),
+                daily_change_pct=daily_change_pct,
+                is_outlier=is_outlier,
+                outlier_reason=outlier_reason,
+                raw_candidates=raw_candidates,
             )
         )
 
