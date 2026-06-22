@@ -54,11 +54,23 @@ class PriceHistoryPoint(BaseModel):
     raw_candidates: list[RawPriceCandidate] = Field(default_factory=list)
 
 
+class CorporateActionMetadata(BaseModel):
+    symbol: str
+    effective_date: date
+    kind: str
+    old_ratio: Optional[str] = None
+    new_ratio: Optional[str] = None
+    description: Optional[str] = None
+
+
 class PriceHistoryResponse(BaseModel):
     base_currency: str
     window_days: int
     points: int
     missing_fx: bool = False
+    has_adjustments: bool = False
+    default_series: str = "raw"
+    corporate_actions: Optional[List[CorporateActionMetadata]] = None
     prices: List[PriceHistoryPoint]
 
 
@@ -308,6 +320,26 @@ def _known_event_dates(actions: list[CorporateAction], available_dates: Iterable
     return event_dates
 
 
+def _corporate_actions_in_window(
+    actions: list[CorporateAction], window_start: date, window_end: date
+) -> list[CorporateAction]:
+    return [action for action in actions if window_start <= action.effective_date <= window_end]
+
+
+def _corporate_action_metadata(actions: list[CorporateAction]) -> list[CorporateActionMetadata]:
+    return [
+        CorporateActionMetadata(
+            symbol=action.symbol,
+            effective_date=action.effective_date,
+            kind=action.kind,
+            old_ratio=action.old_ratio,
+            new_ratio=action.new_ratio,
+            description=action.description,
+        )
+        for action in actions
+    ]
+
+
 _CACHE: Dict[tuple[str, int, str], tuple[float, PriceHistoryResponse]] = {}
 
 
@@ -343,7 +375,14 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
     if cached:
         return cached
 
-    window_start = date.today() - timedelta(days=window_days - 1)
+    window_end = date.today()
+    window_start = window_end - timedelta(days=window_days - 1)
+    actions = get_corporate_actions(symbol)
+    window_actions = _corporate_actions_in_window(actions, window_start, window_end)
+    has_adjustments = bool(window_actions)
+    default_series = "adjusted" if has_adjustments else "raw"
+    corporate_actions = _corporate_action_metadata(window_actions) if has_adjustments else None
+
     price_rows = _load_price_rows(symbol, window_start)
     best_per_day, candidates_by_day = _pick_best_price_per_day(price_rows)
     per_day = {dt: row for dt, row in best_per_day.items() if dt >= window_start}
@@ -355,6 +394,9 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
             window_days=window_days,
             points=0,
             missing_fx=False,
+            has_adjustments=has_adjustments,
+            default_series=default_series,
+            corporate_actions=corporate_actions,
             prices=[],
         )
         _set_cached(cache_key, response)
@@ -364,7 +406,6 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
     fx_rows = _load_fx_rows(earliest_dt - timedelta(days=FX_LOOKBACK_BUFFER_DAYS))
     fx_lookup = _build_fx_lookup(fx_rows)
 
-    actions = get_corporate_actions(symbol)
     known_event_dates = _known_event_dates(actions, per_day.keys())
 
     prices: list[PriceHistoryPoint] = []
@@ -436,6 +477,9 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
         window_days=window_days,
         points=len(prices),
         missing_fx=missing_fx,
+        has_adjustments=has_adjustments,
+        default_series=default_series,
+        corporate_actions=corporate_actions,
         prices=prices,
     )
     _set_cached(cache_key, response)
