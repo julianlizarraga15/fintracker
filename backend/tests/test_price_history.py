@@ -291,6 +291,8 @@ def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tm
     response = prices_history.get_price_history("SPY", days=4, base_currency="ARS")
 
     assert response.points == 2
+    assert response.has_adjustments is True
+    assert response.default_series == "adjusted"
     assert response.prices[0].price_raw == pytest.approx(60000.0)
     assert response.prices[0].price_adjusted == pytest.approx(20000.0)
     assert response.prices[0].price == pytest.approx(20000.0)

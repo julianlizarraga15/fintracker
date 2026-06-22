@@ -853,10 +853,7 @@
       }
 
       function defaultSeriesMode(history) {
-        if (history?.default_series !== undefined) {
-          return normalizeSeriesMode(history.default_series);
-        }
-        return hasPriceAdjustments(history) ? "adjusted" : "raw";
+        return normalizeSeriesMode(history?.default_series);
       }
 
       function valuesForHistory(history, useBaseCurrency = true, seriesMode = "raw") {
