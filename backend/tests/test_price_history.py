@@ -243,3 +243,63 @@ def test_price_history_includes_raw_candidates_daily_change_and_outlier(tmp_path
         "same_quality_older",
         "same_quality_newer",
     }
+
+
+def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(tmp_path, monkeypatch):
+    prices_history.clear_cache()
+    prices_dir = tmp_path / "prices"
+    fx_dir = tmp_path / "fx"
+    previous = date(2026, 5, 29)
+    effective = date(2026, 6, 1)
+
+    _write_prices(
+        prices_dir,
+        previous,
+        [
+            {
+                "asof_dt": previous.isoformat(),
+                "symbol": "SPY",
+                "price": 60000.0,
+                "currency": "ARS",
+                "venue": "BCBA",
+                "source": "pre_split",
+                "quality_score": 90,
+            }
+        ],
+    )
+    _write_prices(
+        prices_dir,
+        effective,
+        [
+            {
+                "asof_dt": effective.isoformat(),
+                "symbol": "SPY",
+                "price": 20000.0,
+                "currency": "ARS",
+                "venue": "BCBA",
+                "source": "post_split",
+                "quality_score": 90,
+            }
+        ],
+    )
+
+    monkeypatch.setattr(prices_history, "PRICES_DIR", prices_dir)
+    monkeypatch.setattr(prices_history, "FX_DIR", fx_dir)
+    fixed_date = type("FixedDate", (date,), {"today": classmethod(lambda cls: effective)})
+    monkeypatch.setattr(prices_history, "date", fixed_date)
+
+    response = prices_history.get_price_history("SPY", days=4, base_currency="ARS")
+
+    assert response.points == 2
+    assert response.prices[0].price_raw == pytest.approx(60000.0)
+    assert response.prices[0].price_adjusted == pytest.approx(20000.0)
+    assert response.prices[0].price == pytest.approx(20000.0)
+    assert response.prices[0].price_base_raw == pytest.approx(60000.0)
+    assert response.prices[0].price_base_adjusted == pytest.approx(20000.0)
+    assert response.prices[1].price_raw == pytest.approx(20000.0)
+    assert response.prices[1].price_adjusted == pytest.approx(20000.0)
+    assert response.prices[1].daily_change_pct == pytest.approx(0.0)
+    assert response.prices[1].is_outlier is False
+    assert response.prices[1].outlier_reason is None
+    assert all(point.is_known_event for point in response.prices)
+    assert response.prices[1].known_event_reason == "SPY CEDEAR ratio changed from 20:1 to 60:1"
