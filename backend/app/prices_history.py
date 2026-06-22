@@ -4,7 +4,7 @@ import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import time
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Literal, Optional
 
 import pandas as pd
 from backend.app.corporate_actions import CorporateAction, get_corporate_actions, parse_cedear_ratio
@@ -69,7 +69,7 @@ class PriceHistoryResponse(BaseModel):
     points: int
     missing_fx: bool = False
     has_adjustments: bool = False
-    default_series: str = "raw"
+    default_series: Literal["raw", "adjusted"] = "raw"
     corporate_actions: Optional[List[CorporateActionMetadata]] = None
     prices: List[PriceHistoryPoint]
 
@@ -472,6 +472,12 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
             )
         )
 
+    has_adjustments = bool(window_actions) or any(
+        point.price_adjusted != point.price_raw
+        or point.price_base_adjusted != point.price_base_raw
+        for point in prices
+    )
+    default_series = "adjusted" if has_adjustments else "raw"
     response = PriceHistoryResponse(
         base_currency=base_ccy,
         window_days=window_days,

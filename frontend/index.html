@@ -675,6 +675,7 @@
             </div>
             <div class="modal__actions">
               <button type="button" class="toggle-button" id="history-modal-toggle">Show native currency</button>
+              <button type="button" class="toggle-button" id="history-modal-series-toggle">Show adjusted values</button>
             </div>
           </div>
           <div class="modal__raw" role="region" aria-label="Raw price history data">
@@ -713,6 +714,7 @@
         historyModalSources: document.getElementById("history-modal-sources"),
         historyModalRawTable: document.getElementById("history-modal-raw-table"),
         historyModalToggle: document.getElementById("history-modal-toggle"),
+        historyModalSeriesToggle: document.getElementById("history-modal-series-toggle"),
         historyModalClose: document.getElementById("history-modal-close"),
       };
 
@@ -726,7 +728,7 @@
       const DETAIL_CHART_WIDTH = 760;
       const DETAIL_CHART_HEIGHT = 200;
       const priceHistoryCache = new Map();
-      const chartState = { mode: "base", symbol: null, history: null };
+      const chartState = { currencyMode: "base", seriesMode: "raw", symbol: null, history: null };
       let lastBaseCurrency = "";
 
       const authState = {
@@ -877,25 +879,59 @@
         container.innerHTML = `<span class="sparkline__placeholder">${text}</span>`;
       }
 
-      function valuesForHistory(history, useBaseCurrency = true) {
+      function coalescePrice(...values) {
+        return values.find((value) => value !== null && value !== undefined);
+      }
+
+      function normalizeSeriesMode(mode) {
+        return mode === "adjusted" ? "adjusted" : "raw";
+      }
+
+      function pricesDiffer(left, right) {
+        return (
+          left !== null &&
+          left !== undefined &&
+          right !== null &&
+          right !== undefined &&
+          Number(left) !== Number(right)
+        );
+      }
+
+      function hasPriceAdjustments(history) {
+        if (history?.has_adjustments !== undefined) {
+          return Boolean(history.has_adjustments);
+        }
+        return Array.isArray(history?.prices)
+          ? history.prices.some((point) =>
+              pricesDiffer(point.price_adjusted, point.price_raw) ||
+              pricesDiffer(point.price_base_adjusted, point.price_base_raw)
+            )
+          : false;
+      }
+
+      function defaultSeriesMode(history) {
+        return normalizeSeriesMode(history?.default_series);
+      }
+
+      function valuesForHistory(history, useBaseCurrency = true, seriesMode = "raw") {
         if (!history || !Array.isArray(history.prices)) {
           return { values: [], dates: [], currencies: [] };
         }
         const base = (history.base_currency || lastBaseCurrency || "").toUpperCase();
+        const normalizedSeriesMode = normalizeSeriesMode(seriesMode);
         const values = [];
         const dates = [];
         const currencies = [];
         history.prices.forEach((point) => {
-          const priceBase = point.price_base_raw ?? point.price_base;
           const currency = (point.currency || "").toUpperCase();
           const value =
-            useBaseCurrency && priceBase !== null && priceBase !== undefined
-              ? priceBase
-              : !useBaseCurrency
-              ? point.price_raw ?? point.price
-              : currency === base
-              ? point.price_raw ?? point.price
-              : null;
+            normalizedSeriesMode === "adjusted"
+              ? useBaseCurrency
+                ? coalescePrice(point.price_base_adjusted, point.price_base_raw, point.price_base)
+                : coalescePrice(point.price_adjusted, point.price_raw, point.price)
+              : useBaseCurrency
+              ? coalescePrice(point.price_base_raw, point.price_base)
+              : coalescePrice(point.price_raw, point.price);
           if (value === null || value === undefined || Number.isNaN(value)) {
             return;
           }
@@ -1070,7 +1106,7 @@
         return { svg, points };
       }
 
-      function attachChartTooltip(container, svg, points, history, useBaseCurrency) {
+      function attachChartTooltip(container, svg, points, history, useBaseCurrency, seriesMode = "raw") {
         if (!container || !svg || !points.length) return;
         const tooltip = document.createElement("div");
         tooltip.className = "chart-tooltip";
@@ -1093,7 +1129,8 @@
           const currencyLabel = useBaseCurrency
             ? baseLabel
             : (point.currency || history.prices?.[index]?.currency || "native").toString().toUpperCase();
-          tooltip.textContent = `${dateLabel} · ${formatNumber(point.value)} ${currencyLabel}`;
+          const seriesLabel = normalizeSeriesMode(seriesMode) === "adjusted" ? "Adjusted" : "Raw";
+          tooltip.textContent = `${dateLabel} · ${seriesLabel} · ${formatNumber(point.value)} ${currencyLabel}`;
           const containerRect = container.getBoundingClientRect();
           const relativeX = viewBox.width
             ? ((point.x - viewBox.x) / viewBox.width) * containerRect.width
@@ -1179,7 +1216,7 @@
               renderSparklinePlaceholder(el, history && history.missing_fx ? "FX missing" : "No history", true);
               return;
             }
-            const series = valuesForHistory(history, true).values;
+            const series = valuesForHistory(history, true, defaultSeriesMode(history)).values;
             if (!series || series.length < 2) {
               renderSparklinePlaceholder(el, "No history", true);
               return;
@@ -1443,9 +1480,10 @@
         const history = chartState.history;
         if (!history) return;
         const baseLabel = (history.base_currency || lastBaseCurrency || "").toUpperCase() || "BASE";
-        const baseRequested = chartState.mode === "base";
+        const baseRequested = chartState.currencyMode === "base";
         const useBase = baseRequested && !history.missing_fx;
-        const series = valuesForHistory(history, useBase);
+        const seriesMode = normalizeSeriesMode(chartState.seriesMode);
+        const series = valuesForHistory(history, useBase, seriesMode);
         const change =
           series.values.length >= 2 && series.values[0] !== 0
             ? ((series.values[series.values.length - 1] - series.values[0]) / series.values[0]) * PERCENT_SCALE
@@ -1457,7 +1495,8 @@
             ? "Missing FX · showing native"
             : `Base ${baseLabel}`
           : "Native currency";
-        dom.historyModalSubtitle.textContent = `${history.window_days}-day window · ${modeLabel}${
+        const seriesLabel = seriesMode === "adjusted" ? "Adjusted" : "Raw";
+        dom.historyModalSubtitle.textContent = `${history.window_days}-day window · ${modeLabel} · ${seriesLabel}${
           change !== null && Number.isFinite(change) ? ` · ${formatPercent(change, 1)}` : ""
         }`;
         dom.historyModalAlert.classList.toggle("is-visible", baseRequested && history.missing_fx);
@@ -1472,6 +1511,10 @@
           ? "Show native currency"
           : `Show ${baseLabel}`;
         dom.historyModalToggle.disabled = toggleDisabled;
+        const hasAdjustments = hasPriceAdjustments(history);
+        dom.historyModalSeriesToggle.hidden = !hasAdjustments;
+        dom.historyModalSeriesToggle.disabled = !hasAdjustments;
+        dom.historyModalSeriesToggle.textContent = seriesMode === "adjusted" ? "Show raw values" : "Show adjusted values";
 
         const target = dom.historyModalChart;
         target.innerHTML = "";
@@ -1488,7 +1531,7 @@
         );
         if (detailChart && detailChart.svg) {
           target.appendChild(detailChart.svg);
-          attachChartTooltip(target, detailChart.svg, detailChart.points, history, useBase);
+          attachChartTooltip(target, detailChart.svg, detailChart.points, history, useBase, seriesMode);
         } else {
           target.innerHTML = '<div class="sparkline__placeholder">Chart unavailable.</div>';
         }
@@ -1500,17 +1543,21 @@
         if (!normalized) return;
         chartState.symbol = normalized;
         chartState.history = null;
-        chartState.mode = "base";
+        chartState.currencyMode = "base";
+        chartState.seriesMode = "raw";
         dom.historyModal.classList.remove("is-hidden");
         dom.historyModalSubtitle.textContent = "Loading…";
         dom.historyModalChart.innerHTML = '<div class="sparkline__placeholder">Loading…</div>';
         clearHistoryModalRawTable();
         dom.historyModalAlert.classList.remove("is-visible");
         dom.historyModalToggle.disabled = true;
+        dom.historyModalSeriesToggle.hidden = true;
+        dom.historyModalSeriesToggle.disabled = true;
         try {
           const history = await fetchPriceHistory(normalized, lastBaseCurrency || undefined);
           chartState.history = history;
-          chartState.mode = history && history.missing_fx ? "native" : "base";
+          chartState.currencyMode = history && history.missing_fx ? "native" : "base";
+          chartState.seriesMode = defaultSeriesMode(history);
           renderHistoryModal();
         } catch (error) {
           dom.historyModalChart.innerHTML = `<div class="sparkline__placeholder">${
@@ -1519,7 +1566,9 @@
           dom.historyModalSubtitle.textContent = normalized;
           clearHistoryModalRawTable();
         } finally {
-          dom.historyModalToggle.disabled = false;
+          if (!chartState.history) {
+            dom.historyModalToggle.disabled = false;
+          }
         }
       }
 
@@ -1527,7 +1576,8 @@
         dom.historyModal.classList.add("is-hidden");
         chartState.symbol = null;
         chartState.history = null;
-        chartState.mode = "base";
+        chartState.currencyMode = "base";
+        chartState.seriesMode = "raw";
         clearHistoryModalRawTable();
       }
 
@@ -1655,7 +1705,12 @@
       dom.historyModalClose.addEventListener("click", closeHistoryModal);
       dom.historyModalToggle.addEventListener("click", () => {
         if (!chartState.history || dom.historyModalToggle.disabled) return;
-        chartState.mode = chartState.mode === "base" ? "native" : "base";
+        chartState.currencyMode = chartState.currencyMode === "base" ? "native" : "base";
+        renderHistoryModal();
+      });
+      dom.historyModalSeriesToggle.addEventListener("click", () => {
+        if (!chartState.history || dom.historyModalSeriesToggle.disabled || !hasPriceAdjustments(chartState.history)) return;
+        chartState.seriesMode = normalizeSeriesMode(chartState.seriesMode) === "adjusted" ? "raw" : "adjusted";
         renderHistoryModal();
       });
       dom.historyModal.addEventListener("click", (event) => {
