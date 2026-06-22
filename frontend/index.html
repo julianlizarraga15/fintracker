@@ -463,6 +463,59 @@
         font-size: 0.95rem;
       }
 
+      .modal__raw {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .modal__raw-table {
+        min-width: 860px;
+      }
+
+      .modal__raw-table th,
+      .modal__raw-table td {
+        padding: 8px 10px;
+        vertical-align: top;
+      }
+
+      .modal__raw-table .numeric {
+        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .modal__raw-candidates {
+        margin-top: 4px;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        line-height: 1.35;
+      }
+
+      .modal__badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 3px 8px;
+        border: 1px solid var(--panel-border);
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .modal__badge[data-tone="anomaly"] {
+        color: var(--danger);
+        border-color: rgba(255, 107, 107, 0.55);
+        background: rgba(255, 107, 107, 0.08);
+      }
+
+      .modal__badge[data-tone="known-event"] {
+        color: #ffd66b;
+        border-color: rgba(255, 214, 107, 0.55);
+        background: rgba(255, 214, 107, 0.08);
+      }
+
       .modal__alert {
         color: var(--danger);
         font-size: 0.9rem;
@@ -624,6 +677,9 @@
               <button type="button" class="toggle-button" id="history-modal-toggle">Show native currency</button>
             </div>
           </div>
+          <div class="modal__raw" role="region" aria-label="Raw price history data">
+            <table class="modal__raw-table" id="history-modal-raw-table"></table>
+          </div>
         </div>
       </div>
     </div>
@@ -655,6 +711,7 @@
         historyModalAlert: document.getElementById("history-modal-alert"),
         historyModalChart: document.getElementById("history-modal-chart"),
         historyModalSources: document.getElementById("history-modal-sources"),
+        historyModalRawTable: document.getElementById("history-modal-raw-table"),
         historyModalToggle: document.getElementById("history-modal-toggle"),
         historyModalClose: document.getElementById("history-modal-close"),
       };
@@ -829,15 +886,15 @@
         const dates = [];
         const currencies = [];
         history.prices.forEach((point) => {
-          const priceBase = point.price_base;
+          const priceBase = point.price_base_raw ?? point.price_base;
           const currency = (point.currency || "").toUpperCase();
           const value =
             useBaseCurrency && priceBase !== null && priceBase !== undefined
               ? priceBase
               : !useBaseCurrency
-              ? point.price
+              ? point.price_raw ?? point.price
               : currency === base
-              ? point.price
+              ? point.price_raw ?? point.price
               : null;
           if (value === null || value === undefined || Number.isNaN(value)) {
             return;
@@ -1285,6 +1342,103 @@
         dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by ${summaryCurrency} value).`;
       }
 
+      function clearHistoryModalRawTable() {
+        if (dom.historyModalRawTable) {
+          dom.historyModalRawTable.replaceChildren();
+        }
+      }
+
+      function appendTextCell(row, text, className = "") {
+        const cell = document.createElement("td");
+        if (className) cell.className = className;
+        cell.textContent = text;
+        row.appendChild(cell);
+        return cell;
+      }
+
+      function formatCandidate(candidate) {
+        if (!candidate || typeof candidate !== "object") {
+          return String(candidate ?? "—");
+        }
+        const raw = candidate.price_raw ?? candidate.price ?? candidate.value ?? "—";
+        const currency = candidate.currency ? ` ${candidate.currency}` : "";
+        const source = candidate.source || candidate.venue ? ` (${[candidate.source, candidate.venue].filter(Boolean).join(" · ")})` : "";
+        return `${raw}${currency}${source}`;
+      }
+
+      function renderHistoryRawTable(history) {
+        if (!dom.historyModalRawTable) return;
+        clearHistoryModalRawTable();
+        const table = dom.historyModalRawTable;
+        const thead = document.createElement("thead");
+        thead.innerHTML = `
+          <tr>
+            <th>Date</th>
+            <th>Raw price</th>
+            <th>Currency</th>
+            <th>Base price</th>
+            <th>Source</th>
+            <th>Venue</th>
+            <th>Quality</th>
+            <th>Daily change</th>
+            <th>State</th>
+          </tr>
+        `;
+        const tbody = document.createElement("tbody");
+        const prices = Array.isArray(history?.prices) ? history.prices : [];
+        if (!prices.length) {
+          const row = document.createElement("tr");
+          const cell = appendTextCell(row, "No raw price points available.", "empty-state");
+          cell.colSpan = 9;
+          tbody.appendChild(row);
+        }
+        prices.forEach((point, index) => {
+          const rawPrice = point.price_raw ?? point.price;
+          const basePrice = point.price_base_raw ?? point.price_base;
+          const previous = index > 0 ? prices[index - 1] : null;
+          const previousPrice = previous ? previous.price_raw ?? previous.price : null;
+          const dailyChange =
+            rawPrice !== null &&
+            rawPrice !== undefined &&
+            previousPrice !== null &&
+            previousPrice !== undefined &&
+            Number(previousPrice) !== 0
+              ? ((Number(rawPrice) - Number(previousPrice)) / Number(previousPrice)) * PERCENT_SCALE
+              : point.daily_change_pct ?? point.change_pct ?? null;
+          const row = document.createElement("tr");
+          appendTextCell(row, formatDate(point.asof_dt || point.asof_ts), "numeric");
+          const rawCell = appendTextCell(row, formatNumber(rawPrice, { maximumFractionDigits: 6 }), "numeric");
+          const candidates = Array.isArray(point.raw_candidates) ? point.raw_candidates : [];
+          if (candidates.length) {
+            const details = document.createElement("div");
+            details.className = "modal__raw-candidates";
+            details.textContent = `Candidates: ${candidates.map(formatCandidate).join("; ")}`;
+            rawCell.appendChild(details);
+          }
+          appendTextCell(row, (point.currency || "—").toString().toUpperCase());
+          appendTextCell(row, formatNumber(basePrice, { maximumFractionDigits: 6 }), "numeric");
+          appendTextCell(row, point.source || "—");
+          appendTextCell(row, point.venue || "—");
+          appendTextCell(row, formatNumber(point.quality_score, { maximumFractionDigits: 3 }), "numeric");
+          appendTextCell(row, formatPercent(dailyChange), "numeric");
+          const stateCell = document.createElement("td");
+          const states = [];
+          if (point.is_anomaly || point.anomaly) states.push(["Anomaly", "anomaly"]);
+          if (point.is_known_event || point.known_event) states.push(["Known event", "known-event"]);
+          states.forEach(([label, tone]) => {
+            const badge = document.createElement("span");
+            badge.className = "modal__badge";
+            badge.dataset.tone = tone;
+            badge.textContent = label;
+            stateCell.appendChild(badge);
+          });
+          if (!states.length) stateCell.textContent = "—";
+          row.appendChild(stateCell);
+          tbody.appendChild(row);
+        });
+        table.append(thead, tbody);
+      }
+
       function renderHistoryModal() {
         const history = chartState.history;
         if (!history) return;
@@ -1310,6 +1464,7 @@
 
         const sources = Array.from(new Set((history.prices || []).map((p) => p.source || p.venue).filter(Boolean)));
         dom.historyModalSources.textContent = sources.length ? sources.join(", ") : "Source unknown";
+        renderHistoryRawTable(history);
         const toggleDisabled = history.missing_fx && !useBase;
         dom.historyModalToggle.textContent = toggleDisabled
           ? "Base FX missing"
@@ -1349,6 +1504,7 @@
         dom.historyModal.classList.remove("is-hidden");
         dom.historyModalSubtitle.textContent = "Loading…";
         dom.historyModalChart.innerHTML = '<div class="sparkline__placeholder">Loading…</div>';
+        clearHistoryModalRawTable();
         dom.historyModalAlert.classList.remove("is-visible");
         dom.historyModalToggle.disabled = true;
         try {
@@ -1361,6 +1517,7 @@
             error.message || "Failed to load history."
           }</div>`;
           dom.historyModalSubtitle.textContent = normalized;
+          clearHistoryModalRawTable();
         } finally {
           dom.historyModalToggle.disabled = false;
         }
@@ -1371,6 +1528,7 @@
         chartState.symbol = null;
         chartState.history = null;
         chartState.mode = "base";
+        clearHistoryModalRawTable();
       }
 
       function authHeaders() {
