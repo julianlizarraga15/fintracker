@@ -259,7 +259,7 @@ def _run_files(job_name: str) -> list[Path]:
         return []
     return sorted(
         [path for path in base_dir.glob("*.json") if path.name != "latest.json"],
-        key=lambda path: path.stat().st_mtime,
+        key=lambda path: path.stem,
         reverse=True,
     )
 
@@ -286,13 +286,15 @@ def _summarize(payload: dict[str, Any]) -> JobRunSummary:
 
 def get_latest_job_run(job_name: str = "valuations") -> JobRunResponse:
     latest_path = _job_dir(job_name) / "latest.json"
-    if latest_path.exists():
-        return JobRunResponse(**_read_json(latest_path))
-
     files = _run_files(job_name)
-    if not files:
+    newest_run_path = files[0] if files else None
+    if latest_path.exists():
+        latest_payload = _read_json(latest_path)
+        if newest_run_path is None or str(latest_payload.get("run_id") or "") >= newest_run_path.stem:
+            return JobRunResponse(**latest_payload)
+    if newest_run_path is None:
         raise JobRunNotFound(f"No recorded runs for job '{job_name}'.")
-    return JobRunResponse(**_read_json(files[0]))
+    return JobRunResponse(**_read_json(newest_run_path))
 
 
 def get_job_run_history(job_name: str = "valuations", limit: int = DEFAULT_HISTORY_LIMIT) -> list[JobRunSummary]:

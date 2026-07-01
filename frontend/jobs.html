@@ -242,6 +242,7 @@
         <div class="grid" style="margin-top: 18px">
           <div class="metric"><span class="label">Status</span><div id="latest-status" class="status" data-status="unknown">Unknown</div></div>
           <div class="metric"><span class="label">Started</span><div id="latest-started" class="value">—</div></div>
+          <div class="metric"><span class="label">Freshness</span><div id="latest-freshness" class="value">—</div></div>
           <div class="metric"><span class="label">Duration</span><div id="latest-duration" class="value">—</div></div>
           <div class="metric"><span class="label">Positions</span><div id="latest-positions" class="value">—</div></div>
           <div class="metric"><span class="label">Warnings</span><div id="latest-warnings-count" class="value">—</div></div>
@@ -283,6 +284,7 @@
         feedback: document.getElementById("feedback"),
         latestStatus: document.getElementById("latest-status"),
         latestStarted: document.getElementById("latest-started"),
+        latestFreshness: document.getElementById("latest-freshness"),
         latestDuration: document.getElementById("latest-duration"),
         latestPositions: document.getElementById("latest-positions"),
         latestWarningsCount: document.getElementById("latest-warnings-count"),
@@ -292,6 +294,9 @@
       };
 
       const authState = { token: null, expiresAt: 0 };
+      const HOUR_MS = 60 * 60 * 1000;
+      const JOB_STALE_AFTER_HOURS = 36;
+      const JOB_STALE_AFTER_MS = JOB_STALE_AFTER_HOURS * HOUR_MS;
 
       function setFeedback(message, tone = "muted") {
         dom.feedback.className = tone;
@@ -316,6 +321,21 @@
       function formatDuration(value) {
         if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
         return `${Number(value).toFixed(1)}s`;
+      }
+
+      function getRunAgeMs(value) {
+        if (!value) return null;
+        const startedAt = new Date(value).getTime();
+        if (Number.isNaN(startedAt)) return null;
+        return Date.now() - startedAt;
+      }
+
+      function formatAge(ageMs) {
+        if (ageMs === null || ageMs < 0) return "—";
+        const ageHours = Math.floor(ageMs / HOUR_MS);
+        if (ageHours < 1) return "Less than 1h ago";
+        if (ageHours < 48) return `${ageHours}h ago`;
+        return `${Math.floor(ageHours / 24)}d ago`;
       }
 
       function escapeHtml(value) {
@@ -388,6 +408,10 @@
         dom.latestStatus.textContent = status === "success" ? "Success" : status === "failed" ? "Failed" : status;
         dom.latestStatus.dataset.status = status;
         dom.latestStarted.textContent = formatDateTime(run.started_at);
+        const runAgeMs = getRunAgeMs(run.started_at);
+        const isStale = runAgeMs !== null && runAgeMs > JOB_STALE_AFTER_MS;
+        dom.latestFreshness.textContent = isStale ? `Stale (${formatAge(runAgeMs)})` : formatAge(runAgeMs);
+        dom.latestFreshness.className = `value${isStale ? " warning" : runAgeMs === null ? "" : " success"}`;
         dom.latestDuration.textContent = formatDuration(run.duration_seconds);
         dom.latestPositions.textContent = run.positions_count ?? "—";
         const warnings = Array.isArray(run.warnings) ? run.warnings : [];
@@ -401,6 +425,7 @@
         dom.latestMissingCount.textContent = issues.length;
         dom.latestDetails.innerHTML = `
           <div><strong>Run id:</strong> <span class="mono">${escapeHtml(run.run_id)}</span></div>
+          ${isStale ? `<div class="warning" style="margin-top: 10px"><strong>Stale run:</strong> expected a daily run within ${JOB_STALE_AFTER_HOURS} hours.</div>` : ""}
           <div class="details-grid">
             <div class="detail-card"><strong>Loaded by source</strong><div class="muted" style="margin-top: 10px">${escapeHtml(Object.entries(loaded).map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div></div>
             <div class="detail-card"><strong>Pricing counts</strong><div class="muted" style="margin-top: 10px">${escapeHtml(Object.entries(pricing).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}: ${v}`).join(", ") || "—")}</div></div>
@@ -447,7 +472,12 @@
           ]);
           renderLatest(latest);
           renderHistory(history);
-          setFeedback("Dashboard loaded.", "success");
+          const latestAgeMs = getRunAgeMs(latest.started_at);
+          if (latestAgeMs !== null && latestAgeMs > JOB_STALE_AFTER_MS) {
+            setFeedback(`Latest valuations job is stale. Last run was ${formatAge(latestAgeMs)}.`, "warning");
+          } else {
+            setFeedback("Dashboard loaded.", "success");
+          }
         } catch (error) {
           setFeedback(error.message || "Failed to load dashboard.", "danger");
         } finally {
