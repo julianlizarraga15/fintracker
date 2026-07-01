@@ -13,6 +13,26 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
 - CI/CD builds/pushes images to ECR, then SSM runs `git pull`, `docker-compose pull/down/up`, and restarts the stack on EC2. It sets `HOME=/home/ec2-user` and marks `/home/ec2-user/fintracker` as a Git safe.directory so pulls work.
 - On EC2, always run `docker-compose` from the repo root so the backend bind mount `./data:/app/data` is applied and snapshots write to disk.
 
+### Loading secrets from SSM Parameter Store
+
+In production, set `SSM_ENV_PATH` to an SSM path whose final path segments match the app's environment variable names:
+
+```bash
+aws ssm put-parameter \
+  --name "/fintracker/prod/JWT_SECRET" \
+  --type "SecureString" \
+  --value "replace-me"
+```
+
+The backend loads `.env` first for local development, then fills missing values from SSM when `SSM_ENV_PATH` is set. On EC2, `.env` should contain only non-secret bootstrapping values, for example:
+
+```env
+SSM_ENV_PATH=/fintracker/prod
+AWS_REGION=us-east-1
+```
+
+The EC2 instance role needs `ssm:GetParametersByPath` for that path, plus `kms:Decrypt` if the parameters use a customer-managed KMS key.
+
 ## Getting Started
 1. **Prerequisites**
    - Docker / Docker Compose

@@ -1,5 +1,4 @@
 import hmac
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -28,21 +27,17 @@ from backend.app.valuations import (
     SnapshotNotFound,
     get_latest_valuation_snapshot,
 )
+from backend.core.config import (
+    ACCOUNT_ID,
+    DEMO_AUTH_PASSWORD,
+    DEMO_AUTH_USERNAME,
+    JWT_EXPIRES_MINUTES,
+    JWT_SECRET,
+)
 
 app = FastAPI(title="Fintracker API")
 _auth_scheme = HTTPBearer(auto_error=False)
-DEFAULT_JWT_EXPIRES_MINUTES = 15
 JWT_ALGORITHM = "HS256"
-
-JWT_SECRET = os.getenv("JWT_SECRET")
-DEMO_AUTH_USERNAME = os.getenv("DEMO_AUTH_USERNAME")
-DEMO_AUTH_PASSWORD = os.getenv("DEMO_AUTH_PASSWORD")
-try:
-    JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", str(DEFAULT_JWT_EXPIRES_MINUTES)))
-except ValueError:
-    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
-if JWT_EXPIRES_MINUTES <= 0:
-    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
 JWT_EXPIRES_SECONDS = JWT_EXPIRES_MINUTES * 60
 
 
@@ -72,10 +67,6 @@ def _issue_token(subject: str) -> str:
 
 
 def _detect_account_id() -> Optional[str]:
-    try:
-        from backend.core.config import ACCOUNT_ID  # type: ignore
-    except Exception:
-        return None
     return ACCOUNT_ID
 
 

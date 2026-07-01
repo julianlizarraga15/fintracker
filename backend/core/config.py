@@ -1,9 +1,11 @@
 import os
 import hashlib
+import re
 from dotenv import load_dotenv
 
-# Load environment variables from .env when this module is imported
-load_dotenv()
+SSM_ENV_PATH_VAR = "SSM_ENV_PATH"
+SSM_ENV_OVERRIDE_VAR = "SSM_ENV_OVERRIDE"
+SSM_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _env_as_bool(value: str | None) -> bool:
@@ -12,8 +14,42 @@ def _env_as_bool(value: str | None) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _load_ssm_environment() -> None:
+    ssm_path = os.getenv(SSM_ENV_PATH_VAR)
+    if not ssm_path:
+        return
+
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except Exception as exc:
+        raise RuntimeError("boto3 is required when SSM_ENV_PATH is configured.") from exc
+
+    override_existing = _env_as_bool(os.getenv(SSM_ENV_OVERRIDE_VAR))
+    client = boto3.client("ssm")
+    paginator = client.get_paginator("get_parameters_by_path")
+
+    try:
+        pages = paginator.paginate(Path=ssm_path, WithDecryption=True, Recursive=True)
+        for page in pages:
+            for parameter in page.get("Parameters", []):
+                env_name = parameter["Name"].rstrip("/").rsplit("/", 1)[-1]
+                if not SSM_ENV_NAME_PATTERN.fullmatch(env_name):
+                    raise ValueError(f"Invalid environment variable name from SSM parameter: {parameter['Name']}")
+                if override_existing or env_name not in os.environ:
+                    os.environ[env_name] = parameter.get("Value", "")
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Failed to load parameters from SSM path {ssm_path!r}.") from exc
+
+
+# Load local .env first for development, then fill missing values from SSM in production.
+load_dotenv()
+_load_ssm_environment()
+
+
 DEFAULT_BINANCE_BASE_URL = "https://api.binance.com"
 DEFAULT_BINANCE_RECV_WINDOW_MS = 5000
+DEFAULT_JWT_EXPIRES_MINUTES = 15
 
 OUTPUT_DIR = os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions")
 S3_BUCKET = os.getenv("SNAPSHOTS_S3_BUCKET")
@@ -68,3 +104,13 @@ METAMASK_BTC_ADDRESSES = os.getenv("METAMASK_BTC_ADDRESSES", "")
 ENABLE_METAMASK_BTC = _env_as_bool(os.getenv("ENABLE_METAMASK_BTC"))
 
 BLOCKCYPHER_API_KEY = os.getenv("BLOCKCYPHER_API_KEY")
+
+JWT_SECRET = os.getenv("JWT_SECRET")
+DEMO_AUTH_USERNAME = os.getenv("DEMO_AUTH_USERNAME")
+DEMO_AUTH_PASSWORD = os.getenv("DEMO_AUTH_PASSWORD")
+try:
+    JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", str(DEFAULT_JWT_EXPIRES_MINUTES)))
+except ValueError:
+    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
+if JWT_EXPIRES_MINUTES <= 0:
+    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
