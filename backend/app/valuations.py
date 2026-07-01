@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+from backend.app.snapshot_parsing import parse_snapshot_date, parse_snapshot_datetime, safe_float, safe_int
 from pydantic import BaseModel, Field
 
 
@@ -55,43 +56,20 @@ def _read_snapshot(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
 
 
-def _safe_float(value) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if pd.isna(result) else result
-
-
-def _safe_int(value) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        result = int(value)
-    except (TypeError, ValueError):
-        return None
-    return None if pd.isna(result) else result
-
-
 def _parse_date(value) -> date:
-    if isinstance(value, date):
-        return value
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, str):
-        return date.fromisoformat(value.split(" ")[0])
-    raise SnapshotNotFound("snapshot_dt missing in valuation file.")
+    try:
+        return parse_snapshot_date(value, error_message="snapshot_dt missing in valuation file.")
+    except ValueError as exc:
+        raise SnapshotNotFound(str(exc)) from exc
 
 
 def _parse_datetime(value) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        value = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(value)
-    raise SnapshotNotFound("computed_ts missing in valuation file.")
+    try:
+        return parse_snapshot_datetime(value, error_message="computed_ts missing in valuation file.")
+    except ValueError as exc:
+        if str(exc) == "computed_ts missing in valuation file.":
+            raise SnapshotNotFound(str(exc)) from exc
+        raise
 
 
 def _compute_portfolio_share(value_base: Optional[float], total_value_base: Optional[float]) -> Optional[float]:
@@ -144,23 +122,23 @@ def _build_rows(df: pd.DataFrame, total_value_base: Optional[float]) -> list[Val
         symbol = record.get("symbol") or record.get("raw_symbol")
         if not symbol:
             continue
-        value_base = _safe_float(record.get("value_base"))
+        value_base = safe_float(record.get("value_base"))
         rows.append(
             ValuationRow(
                 symbol=symbol,
-                quantity=_safe_float(record.get("quantity")) or 0.0,
+                quantity=safe_float(record.get("quantity")) or 0.0,
                 value_base=value_base,
-                unit_price_base=_safe_float(record.get("unit_price_base")),
-                unit_price_native=_safe_float(record.get("unit_price_native")),
+                unit_price_base=safe_float(record.get("unit_price_base")),
+                unit_price_native=safe_float(record.get("unit_price_native")),
                 unit_price_native_ccy=record.get("unit_price_native_ccy"),
-                fx_rate_to_base=_safe_float(record.get("fx_rate_to_base")),
+                fx_rate_to_base=safe_float(record.get("fx_rate_to_base")),
                 account_id=record.get("account_id"),
                 source=record.get("source"),
                 market=record.get("market"),
                 asset_type=record.get("asset_type"),
                 status=record.get("status"),
                 price_source=record.get("price_source"),
-                price_quality_score=_safe_int(record.get("price_quality_score")),
+                price_quality_score=safe_int(record.get("price_quality_score")),
                 fx_source=record.get("fx_source"),
                 portfolio_share_pct=_compute_portfolio_share(value_base, total_value_base),
             )
@@ -188,7 +166,7 @@ def get_latest_valuation_snapshot(account_id: str) -> LatestValuationResponse:
             totals = ValuationTotals(
                 positions=len(df),
                 ok_positions=int((df["status"] == "ok").sum()) if "status" in df else 0,
-                total_value_base=_safe_float(pd.to_numeric(df["value_base"], errors="coerce").sum()) if "value_base" in df else None,
+                total_value_base=safe_float(pd.to_numeric(df["value_base"], errors="coerce").sum()) if "value_base" in df else None,
             )
             rows = _build_rows(df, totals.total_value_base)
             return LatestValuationResponse(
