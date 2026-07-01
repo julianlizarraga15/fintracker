@@ -104,6 +104,9 @@ def test_price_history_prefers_best_quality_and_converts_fx(snapshot_dirs):
     assert response.base_currency == "USD"
     assert response.window_days == 5
     assert response.points == 2
+    assert response.has_adjustments is False
+    assert response.default_series == "raw"
+    assert response.corporate_actions is None
     assert response.missing_fx is False
     assert response.has_adjustments is False
     assert response.default_series == "raw"
@@ -309,6 +312,13 @@ def test_price_history_adjusts_spy_cedear_ratio_change_and_suppresses_outlier(sn
     assert response.points == 2
     assert response.has_adjustments is True
     assert response.default_series == "adjusted"
+    assert response.corporate_actions is not None
+    assert len(response.corporate_actions) == 1
+    assert response.corporate_actions[0].symbol == "SPY"
+    assert response.corporate_actions[0].effective_date == effective
+    assert response.corporate_actions[0].kind == "cedear_ratio_change"
+    assert response.corporate_actions[0].old_ratio == "20:1"
+    assert response.corporate_actions[0].new_ratio == "60:1"
     assert response.prices[0].price_raw == pytest.approx(60000.0)
     assert response.prices[0].price_adjusted == pytest.approx(20000.0)
     assert response.prices[0].price == pytest.approx(20000.0)
