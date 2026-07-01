@@ -7,6 +7,7 @@ from time import time
 from typing import Dict, Iterable, List, Literal, Optional
 
 import pandas as pd
+from backend.app.snapshot_parsing import parse_optional_datetime, parse_snapshot_date, safe_float, safe_int
 from backend.app.corporate_actions import CorporateAction, get_corporate_actions, parse_cedear_ratio
 from pydantic import BaseModel, Field
 
@@ -74,44 +75,12 @@ class PriceHistoryResponse(BaseModel):
     prices: List[PriceHistoryPoint]
 
 
-def _safe_float(value) -> Optional[float]:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if pd.isna(result) else result
-
-
-def _safe_int(value) -> Optional[int]:
-    try:
-        result = int(value)
-    except (TypeError, ValueError):
-        return None
-    return None if pd.isna(result) else result
-
-
 def _parse_date(value) -> date:
-    if isinstance(value, date):
-        return value
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, str):
-        return date.fromisoformat(value.split(" ")[0])
-    raise ValueError("Invalid date value.")
+    return parse_snapshot_date(value)
 
 
 def _parse_datetime(value) -> Optional[datetime]:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        sanitized = value.replace("Z", "+00:00")
-        try:
-            return datetime.fromisoformat(sanitized)
-        except ValueError:
-            return None
-    return None
+    return parse_optional_datetime(value)
 
 
 def _latest_dt_dirs(base_dir: Path) -> list[tuple[date, Path]]:
@@ -193,10 +162,10 @@ def _build_fx_lookup(fx_rows: Iterable[dict]) -> Dict[tuple[str, str], list[tupl
             continue
         from_ccy = (row.get("from_ccy") or "").upper()
         to_ccy = (row.get("to_ccy") or "").upper()
-        rate = _safe_float(row.get("rate"))
+        rate = safe_float(row.get("rate"))
         if not from_ccy or not to_ccy or rate is None:
             continue
-        max_age_days = _safe_int(row.get("max_age_days"))
+        max_age_days = safe_int(row.get("max_age_days"))
         age_limit = FX_DEFAULT_MAX_AGE_DAYS if max_age_days is None else max_age_days
         lookup.setdefault((from_ccy, to_ccy), []).append((asof_dt, rate, age_limit))
 
@@ -232,7 +201,7 @@ def _price_candidate_from_row(row: dict) -> Optional[dict]:
         asof_dt = _parse_date(row.get("asof_dt"))
     except Exception:
         return None
-    price_value = _safe_float(row.get("price"))
+    price_value = safe_float(row.get("price"))
     currency = row.get("currency")
     if price_value is None or not currency:
         return None
@@ -243,13 +212,13 @@ def _price_candidate_from_row(row: dict) -> Optional[dict]:
         "currency": str(currency).upper(),
         "source": row.get("source"),
         "venue": row.get("venue"),
-        "quality_score": _safe_int(row.get("quality_score")) or 0,
+        "quality_score": safe_int(row.get("quality_score")) or 0,
     }
 
 
 def _is_better_price_candidate(candidate: dict, current: dict) -> bool:
-    candidate_quality = _safe_int(candidate.get("quality_score")) or 0
-    current_quality = _safe_int(current.get("quality_score")) or 0
+    candidate_quality = safe_int(candidate.get("quality_score")) or 0
+    current_quality = safe_int(current.get("quality_score")) or 0
     if candidate_quality != current_quality:
         return candidate_quality > current_quality
 
@@ -464,7 +433,7 @@ def get_price_history(symbol: str, days: int = DEFAULT_WINDOW_DAYS, base_currenc
                 known_event_reason=known_event_reason,
                 source=row.get("source"),
                 venue=row.get("venue"),
-                quality_score=_safe_int(row.get("quality_score")),
+                quality_score=safe_int(row.get("quality_score")),
                 daily_change_pct=daily_change_pct,
                 is_outlier=is_outlier,
                 outlier_reason=outlier_reason,
