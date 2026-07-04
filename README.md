@@ -54,6 +54,14 @@ The EC2 instance role needs `ssm:GetParametersByPath` for that path, plus `kms:D
 - Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
 - Only spot balances are fetched; keep keys scoped accordingly.
 
+## PPI Positions
+- Enable with `.env`: set `ENABLE_PPI=1`, `PPI_PUBLIC_API_KEY`, and `PPI_PRIVATE_API_KEY`; optionally set `PPI_ACCOUNT_NUMBER` if your API user has more than one account.
+- Quick read-only check:
+  ```bash
+  .venv/bin/python scripts/fetch_ppi_positions.py
+  ```
+- Daily snapshots now fetch PPI balances/positions, use prices from the PPI portfolio payload, and value ARS rows through the existing FX flow.
+
 ## MetaMask / Ethereum Wallet Balances
 - Enable with `.env`: set `ENABLE_ETHEREUM=true`, `ETHERSCAN_API_KEY`, and `ETHEREUM_WALLET_ADDRESSES` (comma-separated list of 0x... addresses).
 - Automatically fetches native ETH and ERC-20 token balances using the Etherscan API.

@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 import pandas as pd
+import pytest
 
-from backend.core import binance_transform, daily_snapshot, iol_transform
-from backend.valuation.models import Price as PriceModel
+from backend.core import binance_transform, daily_snapshot, iol_transform, ppi_transform
+from backend.valuation.models import FXRate, Price as PriceModel
 
 
 def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
@@ -20,7 +21,10 @@ def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
     monkeypatch.setattr(daily_snapshot, "maybe_upload_to_s3", lambda *args, **kwargs: None)
     monkeypatch.setattr(daily_snapshot, "IOL_USERNAME", "user")
     monkeypatch.setattr(daily_snapshot, "IOL_PASSWORD", "pass")
+    monkeypatch.setattr(daily_snapshot, "ENABLE_PPI", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_BINANCE", True)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_ETHEREUM", False)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_EXODUS", False)
     monkeypatch.setattr(daily_snapshot, "BINANCE_BALANCE_LAMBDA", None)
     monkeypatch.setattr(daily_snapshot, "BINANCE_API_KEY", "key")
     monkeypatch.setattr(daily_snapshot, "BINANCE_API_SECRET", "secret")
@@ -113,3 +117,103 @@ def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
     btc_val = valuations_df[valuations_df["symbol"] == "BTC"].iloc[0]
     assert pd.notna(btc_val["value_base"])
     assert btc_val["status"] == "ok"
+
+
+def test_daily_snapshot_values_ppi_without_iol(monkeypatch):
+    dt_str = "2024-01-01"
+    saved = {}
+
+    def fake_save_snapshot_files(df, resource_name="positions", source=None, account_id=None):
+        saved[resource_name] = df.copy()
+        return {"csv": f"/tmp/{resource_name}.csv", "parquet": None, "dt": dt_str}
+
+    ppi_payload = {
+        "groupedAvailability": [
+            {
+                "currency": "ARS",
+                "availability": [
+                    {"name": "Pesos", "symbol": "ARS", "amount": 1000, "settlement": "INMEDIATA"},
+                ],
+            }
+        ],
+        "groupedInstruments": [
+            {
+                "name": "CEDEARS",
+                "instruments": [
+                    {
+                        "ticker": "SPY",
+                        "description": "SPDR S&P 500",
+                        "quantity": 2,
+                        "price": 10000,
+                        "amount": 20000,
+                        "currency": "PESOS",
+                    }
+                ],
+            },
+            {
+                "name": "PPI-GLOBAL",
+                "instruments": [
+                    {
+                        "ticker": "IWDA",
+                        "description": "iShares Core MSCI World UCITS ETF",
+                        "quantity": 3,
+                        "price": 150,
+                        "amount": 450,
+                        "currency": "DOLARES DIVISA | CCL",
+                    }
+                ],
+            },
+        ],
+    }
+
+    monkeypatch.setattr(daily_snapshot, "save_snapshot_files", fake_save_snapshot_files)
+    monkeypatch.setattr(daily_snapshot, "maybe_upload_to_s3", lambda *args, **kwargs: None)
+    monkeypatch.setattr(daily_snapshot, "IOL_USERNAME", None)
+    monkeypatch.setattr(daily_snapshot, "IOL_PASSWORD", None)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_PPI", True)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_BINANCE", False)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_ETHEREUM", False)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_EXODUS", False)
+    monkeypatch.setattr(daily_snapshot, "ACCOUNT_ID", "acct-ppi")
+    monkeypatch.setattr(ppi_transform, "ACCOUNT_ID", "acct-ppi")
+
+    monkeypatch.setattr(daily_snapshot, "login_ppi", lambda: object())
+    monkeypatch.setattr(daily_snapshot, "resolve_ppi_account_number", lambda ppi: "123")
+    monkeypatch.setattr(daily_snapshot, "get_ppi_balance_and_positions", lambda ppi, account_number: ppi_payload)
+    monkeypatch.setattr(daily_snapshot, "load_holdings", lambda: [])
+    monkeypatch.setattr(daily_snapshot, "load_crypto_holdings", lambda: [])
+    monkeypatch.setattr(daily_snapshot, "fetch_crypto_prices", lambda symbols: [])
+    monkeypatch.setattr(daily_snapshot, "fetch_santander_nav_values", lambda fund_ids: [])
+    monkeypatch.setattr(
+        daily_snapshot,
+        "get_fx_rates",
+        lambda: [
+            FXRate(
+                asof_dt=date.today(),
+                from_ccy="USD",
+                to_ccy="ARS",
+                rate=100.0,
+                source="test_fx",
+            )
+        ],
+    )
+
+    daily_snapshot.main()
+
+    positions_df = saved["positions"]
+    assert set(positions_df["symbol"]) == {"CASH_ARS_INMEDIATA", "SPY", "IWDA"}
+    assert (positions_df["source"] == "ppi").all()
+
+    prices_df = saved["prices"]
+    assert set(prices_df["symbol"]) == {"CASH_ARS_INMEDIATA", "SPY", "IWDA"}
+
+    valuations_df = saved["valuations"]
+    spy_val = valuations_df[valuations_df["symbol"] == "SPY"].iloc[0]
+    assert spy_val["status"] == "ok"
+    assert spy_val["asset_type"] == "cedear"
+    assert spy_val["value_base"] == pytest.approx(200.0)
+
+    iwda_val = valuations_df[valuations_df["symbol"] == "IWDA"].iloc[0]
+    assert iwda_val["status"] == "ok"
+    assert iwda_val["asset_type"] == "other"
+    assert iwda_val["value_base"] == pytest.approx(450.0)

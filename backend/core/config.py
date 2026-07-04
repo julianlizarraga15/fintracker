@@ -50,6 +50,7 @@ _load_ssm_environment()
 DEFAULT_BINANCE_BASE_URL = "https://api.binance.com"
 DEFAULT_BINANCE_RECV_WINDOW_MS = 5000
 DEFAULT_JWT_EXPIRES_MINUTES = 15
+DEFAULT_PPI_API_VERSION = "1.0"
 
 OUTPUT_DIR = os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions")
 S3_BUCKET = os.getenv("SNAPSHOTS_S3_BUCKET")
@@ -57,6 +58,13 @@ S3_PREFIX = os.getenv("SNAPSHOTS_S3_PREFIX", "positions/")
 
 IOL_USERNAME = os.getenv("IOL_USERNAME")
 IOL_PASSWORD = os.getenv("IOL_PASSWORD")
+
+PPI_PUBLIC_API_KEY = os.getenv("PPI_PUBLIC_API_KEY")
+PPI_PRIVATE_API_KEY = os.getenv("PPI_PRIVATE_API_KEY")
+PPI_ACCOUNT_NUMBER = os.getenv("PPI_ACCOUNT_NUMBER")
+PPI_API_VERSION = os.getenv("PPI_API_VERSION", DEFAULT_PPI_API_VERSION)
+ENABLE_PPI = _env_as_bool(os.getenv("ENABLE_PPI"))
+PPI_SANDBOX = _env_as_bool(os.getenv("PPI_SANDBOX"))
 
 ACCOUNT_EMAIL = os.getenv("ACCOUNT_EMAIL")
 
