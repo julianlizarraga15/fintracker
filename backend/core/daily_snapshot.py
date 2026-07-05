@@ -38,13 +38,23 @@ from backend.core.ppi_client import (
     resolve_account_number as resolve_ppi_account_number,
 )
 from backend.core.ppi_transform import positions_to_df as ppi_positions_to_df
-from backend.core.ppi_transform import prices_from_positions as ppi_prices_from_positions
+from backend.core.ppi_transform import (
+    prices_from_positions as ppi_prices_from_positions,
+)
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
 from backend.core.iol_client import get_prices_for_positions, get_fx_rates
 from backend.core.santander_holdings import SantanderHolding, load_holdings
 from backend.core.santander_nav import fetch_share_values as fetch_santander_nav_values
-from backend.core.crypto_holdings import CryptoHolding, load_holdings as load_crypto_holdings
+from backend.core.crypto_holdings import (
+    CryptoHolding,
+    load_holdings as load_crypto_holdings,
+)
 from backend.core.crypto_prices import fetch_simple_prices as fetch_crypto_prices
+from backend.core.sources import binance as binance_source
+from backend.core.sources import iol as iol_source
+from backend.core.sources import manual as manual_source
+from backend.core.sources import ppi as ppi_source
+from backend.core.sources import wallets as wallet_source
 from backend.valuation.models import (
     FXRate,
     Position as PositionModel,
@@ -64,15 +74,30 @@ def _log_snapshot_paths(resource: str, info: dict) -> None:
     parquet_path = info.get("parquet")
     if csv_path:
         print(f"[{resource}] CSV saved -> {csv_path}")
-        _log_job_detail({"event": "output_saved", "resource": resource, "file_type": "csv", "path": csv_path})
+        _log_job_detail(
+            {
+                "event": "output_saved",
+                "resource": resource,
+                "file_type": "csv",
+                "path": csv_path,
+            }
+        )
     if parquet_path:
         print(f"[{resource}] Parquet saved -> {parquet_path}")
-        _log_job_detail({"event": "output_saved", "resource": resource, "file_type": "parquet", "path": parquet_path})
+        _log_job_detail(
+            {
+                "event": "output_saved",
+                "resource": resource,
+                "file_type": "parquet",
+                "path": parquet_path,
+            }
+        )
 
 
 def _log_job_detail(payload: dict[str, Any]) -> None:
     """Emit a machine-readable line for the jobs dashboard parser."""
     print(f"[job-detail] {json.dumps(payload, sort_keys=True)}")
+
 
 BASE_CURRENCY = "USD"
 
@@ -90,7 +115,16 @@ POSITION_COLUMNS = [
 ]
 
 USDT_USD_RATE = 1.0
-VALID_ASSET_TYPES = {"equity", "cedear", "etf", "bond", "crypto", "fci", "cash", "other"}
+VALID_ASSET_TYPES = {
+    "equity",
+    "cedear",
+    "etf",
+    "bond",
+    "crypto",
+    "fci",
+    "cash",
+    "other",
+}
 
 
 def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, Any]]:
@@ -98,11 +132,15 @@ def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, An
         import boto3
         from botocore.exceptions import BotoCoreError, ClientError
     except Exception as exc:
-        raise RuntimeError("boto3 is required to invoke the Binance balance Lambda.") from exc
+        raise RuntimeError(
+            "boto3 is required to invoke the Binance balance Lambda."
+        ) from exc
 
     try:
         client = boto3.client("lambda", region_name="sa-east-1")
-        response = client.invoke(FunctionName=function_name, InvocationType="RequestResponse")
+        response = client.invoke(
+            FunctionName=function_name, InvocationType="RequestResponse"
+        )
     except (BotoCoreError, ClientError) as exc:
         raise RuntimeError(f"Error invoking Lambda '{function_name}': {exc}") from exc
 
@@ -111,7 +149,9 @@ def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, An
     payload_text = payload_stream.read().decode("utf-8") if payload_stream else ""
 
     if status_code and status_code >= 400:
-        raise RuntimeError(f"Lambda '{function_name}' returned status {status_code}: {payload_text[:200]}")
+        raise RuntimeError(
+            f"Lambda '{function_name}' returned status {status_code}: {payload_text[:200]}"
+        )
 
     if not payload_text:
         return []
@@ -123,7 +163,11 @@ def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, An
             f"Unexpected Lambda payload from '{function_name}': {payload_text[:200]}"
         ) from exc
 
-    if isinstance(payload_json, dict) and "statusCode" in payload_json and payload_json.get("statusCode", 200) >= 400:
+    if (
+        isinstance(payload_json, dict)
+        and "statusCode" in payload_json
+        and payload_json.get("statusCode", 200) >= 400
+    ):
         raise RuntimeError(
             f"Lambda '{function_name}' responded with status {payload_json.get('statusCode')}: {payload_text[:200]}"
         )
@@ -131,7 +175,11 @@ def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, An
     if isinstance(payload_json, dict) and "body" in payload_json:
         body_content = payload_json.get("body")
         try:
-            payload_json = json.loads(body_content) if isinstance(body_content, str) else body_content
+            payload_json = (
+                json.loads(body_content)
+                if isinstance(body_content, str)
+                else body_content
+            )
         except json.JSONDecodeError as exc:
             raise RuntimeError(
                 f"Unexpected Lambda body from '{function_name}': {str(body_content)[:200]}"
@@ -157,53 +205,15 @@ def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
 
 
 def _manual_positions_df(holdings: list[SantanderHolding]) -> pd.DataFrame:
-    rows = []
-    for holding in holdings:
-        price = holding.get("price")
-        valuation = holding.get("valuation")
-        rows.append(
-            {
-                "symbol": holding["symbol"],
-                "description": holding.get("display_name"),
-                "instrument_type": "fci",
-                "market": holding["market"],
-                "source": holding["source"],
-                "account_id": holding["account_id"],
-                "currency": holding["currency"],
-                "quantity": holding["quantity"],
-                "price": price if price is not None else nan,
-                "valuation": valuation if valuation is not None else nan,
-            }
-        )
-
-    df_manual = pd.DataFrame(rows)
-    if df_manual.empty:
-        return df_manual
-    return df_manual.reindex(columns=POSITION_COLUMNS)
+    return manual_source.santander_positions_df(
+        holdings, position_columns=POSITION_COLUMNS
+    )
 
 
 def _crypto_positions_df(holdings: list[CryptoHolding]) -> pd.DataFrame:
-    rows = []
-    for holding in holdings:
-        rows.append(
-            {
-                "symbol": holding["symbol"],
-                "description": holding.get("display_name"),
-                "instrument_type": "crypto",
-                "market": holding["market"],
-                "source": holding["source"],
-                "account_id": holding["account_id"],
-                "currency": holding["currency"],
-                "quantity": holding["quantity"],
-                "price": nan,
-                "valuation": nan,
-            }
-        )
-
-    df_manual = pd.DataFrame(rows)
-    if df_manual.empty:
-        return df_manual
-    return df_manual.reindex(columns=POSITION_COLUMNS)
+    return manual_source.crypto_positions_df(
+        holdings, position_columns=POSITION_COLUMNS
+    )
 
 
 def _merge_positions_df(df: pd.DataFrame, incoming_df: pd.DataFrame) -> pd.DataFrame:
@@ -230,77 +240,37 @@ def main():
     access_token: str | None = None
     prices: list[PriceModel] = []
 
-    if IOL_USERNAME and IOL_PASSWORD:
-        try:
-            access_token, _ = get_bearer_tokens(IOL_USERNAME, IOL_PASSWORD)
-            raw_items = get_positions(access_token)
-            iol_df = extract_positions_as_df(raw_items)
-            # set account_id column if present
-            if not iol_df.empty:
-                iol_df["account_id"] = ACCOUNT_ID
-            elif raw_items:
-                # Fallback: keep raw positions if the parser returned empty
-                fallback_rows = []
-                for item in raw_items:
-                    if not isinstance(item, dict):
-                        continue
-                    symbol = item.get("simbolo") or item.get("ticker") or item.get("codigo")
-                    qty = item.get("cantidad") or item.get("cantidadNominal")
-                    try:
-                        qty_val = float(qty) if qty is not None else 0.0
-                    except (TypeError, ValueError):
-                        qty_val = 0.0
-                    if not symbol or qty_val <= 0:
-                        continue
-                    price_val = item.get("ultimoPrecio") or item.get("precio")
-                    try:
-                        price_coerced = float(price_val) if price_val is not None else nan
-                    except (TypeError, ValueError):
-                        price_coerced = nan
-                    fallback_rows.append(
-                        {
-                            "symbol": symbol,
-                            "description": item.get("descripcion"),
-                            "instrument_type": item.get("tipoInstrumento") or item.get("instrumento") or item.get("tipo"),
-                            "market": item.get("_market") or item.get("mercado"),
-                            "source": "iol",
-                            "account_id": ACCOUNT_ID,
-                            "currency": None,
-                            "quantity": qty_val,
-                            "price": price_coerced,
-                            "valuation": nan,
-                        }
-                    )
-                if fallback_rows:
-                    iol_df = pd.DataFrame(fallback_rows).reindex(columns=POSITION_COLUMNS)
-            df = _merge_positions_df(df, iol_df)
-        except Exception as e:
-            print(f"Error fetching IOL positions: {e}")
-    else:
-        print("IOL credentials missing; skipping IOL positions.")
+    try:
+        iol_result = iol_source.load_positions(
+            username=IOL_USERNAME,
+            password=IOL_PASSWORD,
+            account_id=ACCOUNT_ID,
+            position_columns=POSITION_COLUMNS,
+            get_bearer_tokens=get_bearer_tokens,
+            get_positions=get_positions,
+            extract_positions_as_df=extract_positions_as_df,
+        )
+        access_token = iol_result.access_token
+        raw_items = iol_result.raw_items
+        df = _merge_positions_df(df, iol_result.df)
+    except Exception as e:
+        print(f"Error fetching IOL positions: {e}")
 
-    if ENABLE_PPI:
-        try:
-            ppi = login_ppi()
-            ppi_account_number = resolve_ppi_account_number(ppi)
-            ppi_payload = get_ppi_balance_and_positions(ppi, ppi_account_number)
-            ppi_df = ppi_positions_to_df(ppi_payload, position_columns=POSITION_COLUMNS)
-            df = _merge_positions_df(df, ppi_df)
-            ppi_price_models = ppi_prices_from_positions(ppi_payload)
-            prices.extend(ppi_price_models)
-            print(f"Loaded {len(ppi_df)} PPI positions.")
-            print(f"Priced {len(ppi_price_models)} PPI positions from portfolio payload.")
-            _log_job_detail(
-                {
-                    "event": "source_counts",
-                    "source": "ppi",
-                    "loaded": len(ppi_df),
-                    "priced": len(ppi_price_models),
-                    "missing": max(len(ppi_df) - len(ppi_price_models), 0),
-                }
-            )
-        except Exception as e:
-            print(f"Error fetching PPI positions: {e}")
+    try:
+        ppi_result = ppi_source.load_positions(
+            enabled=ENABLE_PPI,
+            position_columns=POSITION_COLUMNS,
+            login_ppi=login_ppi,
+            resolve_ppi_account_number=resolve_ppi_account_number,
+            get_ppi_balance_and_positions=get_ppi_balance_and_positions,
+            ppi_positions_to_df=ppi_positions_to_df,
+            ppi_prices_from_positions=ppi_prices_from_positions,
+            log_job_detail=_log_job_detail,
+        )
+        df = _merge_positions_df(df, ppi_result.df)
+        prices.extend(ppi_result.prices)
+    except Exception as e:
+        print(f"Error fetching PPI positions: {e}")
 
     santander_holdings = load_holdings()
     holdings_by_fund_id: dict[str, list[SantanderHolding]] = {}
@@ -323,56 +293,51 @@ def main():
         print(f"Loaded {len(crypto_holdings)} crypto manual holdings.")
 
     binance_symbols: set[str] = set()
-    binance_balances: list[dict[str, Any]] = []
-    if ENABLE_BINANCE:
-        try:
-            if BINANCE_BALANCE_LAMBDA:
-                binance_balances = _fetch_binance_balances_from_lambda(BINANCE_BALANCE_LAMBDA)
-            elif BINANCE_API_KEY and BINANCE_API_SECRET:
-                binance_balances = get_account_balances(
-                    api_key=BINANCE_API_KEY,
-                    api_secret=BINANCE_API_SECRET,
-                    base_url=BINANCE_BASE_URL,
-                    recv_window_ms=BINANCE_RECV_WINDOW_MS,
-                )
-            else:
-                print("ENABLE_BINANCE set but missing BINANCE_API_KEY or BINANCE_API_SECRET.")
-
-            if binance_balances:
-                binance_df = balances_to_df(binance_balances, position_columns=POSITION_COLUMNS)
-                if not binance_df.empty:
-                    df = _merge_positions_df(df, binance_df)
-                    binance_symbols = set(binance_df["symbol"])
-                    print(f"Loaded {len(binance_symbols)} Binance assets.")
-        except Exception as e:
-            print(f"Error fetching Binance balances: {e}")
+    try:
+        binance_result = binance_source.load_positions(
+            enabled=ENABLE_BINANCE,
+            balance_lambda=BINANCE_BALANCE_LAMBDA,
+            api_key=BINANCE_API_KEY,
+            api_secret=BINANCE_API_SECRET,
+            base_url=BINANCE_BASE_URL,
+            recv_window_ms=BINANCE_RECV_WINDOW_MS,
+            position_columns=POSITION_COLUMNS,
+            fetch_from_lambda=_fetch_binance_balances_from_lambda,
+            get_account_balances=get_account_balances,
+            balances_to_df=balances_to_df,
+        )
+        df = _merge_positions_df(df, binance_result.df)
+        binance_symbols = binance_result.symbols
+    except Exception as e:
+        print(f"Error fetching Binance balances: {e}")
 
     ethereum_symbols: set[str] = set()
-    if ENABLE_ETHEREUM:
-        try:
-            addresses = [a.strip() for a in ETHEREUM_WALLET_ADDRESSES.split(",") if a.strip()]
-            if addresses:
-                eth_balances = get_ethereum_balances(addresses)
-                if eth_balances:
-                    eth_df = ethereum_balances_to_df(eth_balances, position_columns=POSITION_COLUMNS)
-                    if not eth_df.empty:
-                        df = _merge_positions_df(df, eth_df)
-                        ethereum_symbols = set(eth_df["symbol"])
-                        print(f"Loaded {len(ethereum_symbols)} Ethereum assets.")
-            else:
-                print("ENABLE_ETHEREUM set but ETHEREUM_WALLET_ADDRESSES is empty.")
-        except Exception as e:
-            print(f"Error fetching Ethereum balances: {e}")
+    try:
+        ethereum_result = wallet_source.load_ethereum_positions(
+            enabled=ENABLE_ETHEREUM,
+            addresses_csv=ETHEREUM_WALLET_ADDRESSES,
+            position_columns=POSITION_COLUMNS,
+            get_ethereum_balances=get_ethereum_balances,
+            ethereum_balances_to_df=ethereum_balances_to_df,
+        )
+        df = _merge_positions_df(df, ethereum_result.df)
+        ethereum_symbols = ethereum_result.symbols
+    except Exception as e:
+        print(f"Error fetching Ethereum balances: {e}")
 
     exodus_symbols: set[str] = set()
     if ENABLE_EXODUS:
         # Exodus ETH
         try:
-            eth_addresses = [a.strip() for a in EXODUS_ETH_ADDRESSES.split(",") if a.strip()]
+            eth_addresses = [
+                a.strip() for a in EXODUS_ETH_ADDRESSES.split(",") if a.strip()
+            ]
             if eth_addresses:
                 eth_balances = get_ethereum_balances(eth_addresses, source="exodus")
                 if eth_balances:
-                    eth_df = ethereum_balances_to_df(eth_balances, position_columns=POSITION_COLUMNS)
+                    eth_df = ethereum_balances_to_df(
+                        eth_balances, position_columns=POSITION_COLUMNS
+                    )
                     if not eth_df.empty:
                         df = _merge_positions_df(df, eth_df)
                         exodus_symbols.update(eth_df["symbol"])
@@ -382,13 +347,17 @@ def main():
 
         # Exodus BTC
         try:
-            btc_addresses = [a.strip() for a in EXODUS_BTC_ADDRESSES.split(",") if a.strip()]
+            btc_addresses = [
+                a.strip() for a in EXODUS_BTC_ADDRESSES.split(",") if a.strip()
+            ]
             if btc_addresses:
                 btc_balances = get_all_btc_balances(btc_addresses, source="exodus")
                 if btc_balances:
                     # Reuse ethereum_balances_to_df for simplicity as it's just a mapper
                     # but we'll manually fix the display name if needed or just let it be
-                    btc_df = ethereum_balances_to_df(btc_balances, position_columns=POSITION_COLUMNS)
+                    btc_df = ethereum_balances_to_df(
+                        btc_balances, position_columns=POSITION_COLUMNS
+                    )
                     if not btc_df.empty:
                         df = _merge_positions_df(df, btc_df)
                         exodus_symbols.update(btc_df["symbol"])
@@ -398,16 +367,20 @@ def main():
 
         # MetaMask BTC
         try:
-            btc_addresses = [a.strip() for a in METAMASK_BTC_ADDRESSES.split(",") if a.strip()]
+            btc_addresses = [
+                a.strip() for a in METAMASK_BTC_ADDRESSES.split(",") if a.strip()
+            ]
             if btc_addresses:
                 btc_balances = get_all_btc_balances(btc_addresses, source="metamask")
                 if btc_balances:
-                    btc_df = ethereum_balances_to_df(btc_balances, position_columns=POSITION_COLUMNS)
+                    btc_df = ethereum_balances_to_df(
+                        btc_balances, position_columns=POSITION_COLUMNS
+                    )
                     if not btc_df.empty:
                         df = _merge_positions_df(df, btc_df)
                         # We don't have a separate metamask_symbols set yet, but we can add it if needed
                         # For now, following the pattern of updating exodus_symbols
-                        exodus_symbols.update(btc_df["symbol"]) 
+                        exodus_symbols.update(btc_df["symbol"])
                         print(f"Loaded {len(btc_balances)} MetaMask Bitcoin assets.")
         except Exception as e:
             print(f"Error fetching MetaMask Bitcoin balances: {e}")
@@ -415,7 +388,10 @@ def main():
     if df.empty:
         print("No positions found or unexpected API format.")
         try:
-            preview = {"items_len": len(raw_items), "first_item": raw_items[0] if raw_items else None}
+            preview = {
+                "items_len": len(raw_items),
+                "first_item": raw_items[0] if raw_items else None,
+            }
             print("Raw preview:", str(preview)[:500])
         except Exception:
             pass
@@ -470,7 +446,9 @@ def main():
             for nav_row in nav_rows:
                 fund_id = nav_row["fund_id"]
                 holdings = holdings_by_fund_id.get(fund_id) or []
-                asof_dt, asof_ts = _parse_nav_timestamp(nav_row.get("current_share_value_date"))
+                asof_dt, asof_ts = _parse_nav_timestamp(
+                    nav_row.get("current_share_value_date")
+                )
                 for holding in holdings:
                     santander_price_models.append(
                         PriceModel(
@@ -527,14 +505,20 @@ def main():
     binance_requires_usdt_fx = False
     if binance_symbols:
         try:
-            binance_price_models, binance_missing_symbols = fetch_binance_prices(list(binance_symbols))
-            binance_requires_usdt_fx = any(p.currency == "USDT" for p in binance_price_models)
+            binance_price_models, binance_missing_symbols = fetch_binance_prices(
+                list(binance_symbols)
+            )
+            binance_requires_usdt_fx = any(
+                p.currency == "USDT" for p in binance_price_models
+            )
         except Exception as e:
             print(f"Error fetching Binance prices: {e}")
 
     if binance_price_models:
         prices.extend(binance_price_models)
-        print(f"Priced {len(binance_price_models)} Binance assets (missing {len(binance_missing_symbols)}).")
+        print(
+            f"Priced {len(binance_price_models)} Binance assets (missing {len(binance_missing_symbols)})."
+        )
         _log_job_detail(
             {
                 "event": "source_counts",
@@ -706,7 +690,11 @@ def main():
     try:
         snapshot_dt_str = info.get("dt")
         try:
-            snapshot_dt = datetime.strptime(snapshot_dt_str, "%Y-%m-%d").date() if snapshot_dt_str else date.today()
+            snapshot_dt = (
+                datetime.strptime(snapshot_dt_str, "%Y-%m-%d").date()
+                if snapshot_dt_str
+                else date.today()
+            )
         except ValueError:
             snapshot_dt = date.today()
 
