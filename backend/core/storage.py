@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Optional, Sequence
 import os
 
-from .config import OUTPUT_DIR, S3_BUCKET, S3_PREFIX, ACCOUNT_ID
+from . import config
+from .config import Settings
 
 _BUCKET_NOTICE_EMITTED = False
 _CREDENTIAL_NOTICE_EMITTED = False
@@ -13,21 +14,28 @@ _CREDENTIAL_NOTICE_EMITTED = False
 
 # --------------------------- helpers ---------------------------
 
-def _parts_for(resource: str, dt: str, source: Optional[str], account_id: Optional[str]) -> list[str]:
+def _parts_for(
+    resource: str,
+    dt: str,
+    source: Optional[str],
+    account_id: Optional[str],
+    settings: Settings | None = None,
+) -> list[str]:
     """Return path/key parts according to your convention."""
+    default_account_id = settings.ACCOUNT_ID if settings is not None else config.ACCOUNT_ID
     parts = [resource, f"dt={dt}"]
 
     if resource == "positions":
         if source:
             parts.append(f"source={source}")
-        parts.append(f"account={(account_id or ACCOUNT_ID)}")
+        parts.append(f"account={(account_id or default_account_id)}")
 
     elif resource in ("prices", "fx"):
         if source:
             parts.append(f"source={source}")
 
     elif resource == "valuations":
-        parts.append(f"account={(account_id or ACCOUNT_ID)}")
+        parts.append(f"account={(account_id or default_account_id)}")
 
     else:  # generic
         if source:
@@ -45,6 +53,7 @@ def save_snapshot_files(
     resource_name: str = "positions",
     source: Optional[str] = None,
     account_id: Optional[str] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """
     Save CSV (always) and Parquet (best-effort) under:
@@ -55,8 +64,9 @@ def save_snapshot_files(
     ts = datetime.now(timezone.utc)
     dt = ts.strftime("%Y-%m-%d")
 
-    out_dir = Path(OUTPUT_DIR)
-    for part in _parts_for(resource_name, dt, source, account_id):
+    output_dir = settings.OUTPUT_DIR if settings is not None else config.OUTPUT_DIR
+    out_dir = Path(output_dir)
+    for part in _parts_for(resource_name, dt, source, account_id, settings):
         out_dir /= part
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -89,6 +99,7 @@ def maybe_upload_to_s3(
     resource_name: str = "positions",
     source: Optional[str] = None,
     account_id: Optional[str] = None,
+    settings: Settings | None = None,
 ) -> None:
     """
     If S3_BUCKET is set, upload given local file paths to:
@@ -96,7 +107,10 @@ def maybe_upload_to_s3(
     """
     global _BUCKET_NOTICE_EMITTED, _CREDENTIAL_NOTICE_EMITTED
 
-    if not S3_BUCKET:
+    s3_bucket = settings.S3_BUCKET if settings is not None else config.S3_BUCKET
+    s3_prefix = settings.S3_PREFIX if settings is not None else config.S3_PREFIX
+
+    if not s3_bucket:
         if not _BUCKET_NOTICE_EMITTED:
             print("[info] S3 bucket not set; skipping upload.")
             _BUCKET_NOTICE_EMITTED = True
@@ -131,17 +145,17 @@ def maybe_upload_to_s3(
 
         s3 = session.client("s3")
 
-        key_prefix = "/".join(_parts_for(resource_name, dt, source, account_id))
-        if S3_PREFIX:
-            key_prefix = f"{S3_PREFIX.rstrip('/')}/{key_prefix}"
+        key_prefix = "/".join(_parts_for(resource_name, dt, source, account_id, settings))
+        if s3_prefix:
+            key_prefix = f"{s3_prefix.rstrip('/')}/{key_prefix}"
 
         for p in paths:
             if not p:
                 continue
             pth = Path(p)
             key = f"{key_prefix}/{pth.name}"
-            s3.upload_file(str(pth), S3_BUCKET, key)
-            print(f"[ok] Uploaded -> s3://{S3_BUCKET}/{key}")
+            s3.upload_file(str(pth), s3_bucket, key)
+            print(f"[ok] Uploaded -> s3://{s3_bucket}/{key}")
 
     except Exception as e:
         # Try to provide a clearer hint for missing credentials (botocore raises NoCredentialsError)
