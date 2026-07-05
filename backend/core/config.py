@@ -1,124 +1,63 @@
-import os
-import hashlib
-import re
-from dotenv import load_dotenv
-
-SSM_ENV_PATH_VAR = "SSM_ENV_PATH"
-SSM_ENV_OVERRIDE_VAR = "SSM_ENV_OVERRIDE"
-SSM_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def _env_as_bool(value: str | None) -> bool:
-    if value is None:
-        return False
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
-
-def _load_ssm_environment() -> None:
-    ssm_path = os.getenv(SSM_ENV_PATH_VAR)
-    if not ssm_path:
-        return
-
-    try:
-        import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
-    except Exception as exc:
-        raise RuntimeError("boto3 is required when SSM_ENV_PATH is configured.") from exc
-
-    override_existing = _env_as_bool(os.getenv(SSM_ENV_OVERRIDE_VAR))
-    client = boto3.client("ssm")
-    paginator = client.get_paginator("get_parameters_by_path")
-
-    try:
-        pages = paginator.paginate(Path=ssm_path, WithDecryption=True, Recursive=True)
-        for page in pages:
-            for parameter in page.get("Parameters", []):
-                env_name = parameter["Name"].rstrip("/").rsplit("/", 1)[-1]
-                if not SSM_ENV_NAME_PATTERN.fullmatch(env_name):
-                    raise ValueError(f"Invalid environment variable name from SSM parameter: {parameter['Name']}")
-                if override_existing or env_name not in os.environ:
-                    os.environ[env_name] = parameter.get("Value", "")
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Failed to load parameters from SSM path {ssm_path!r}.") from exc
-
-
-# Load local .env first for development, then fill missing values from SSM in production.
-load_dotenv()
-_load_ssm_environment()
-
-
-DEFAULT_BINANCE_BASE_URL = "https://api.binance.com"
-DEFAULT_BINANCE_RECV_WINDOW_MS = 5000
-DEFAULT_JWT_EXPIRES_MINUTES = 15
-DEFAULT_PPI_API_VERSION = "1.0"
-
-OUTPUT_DIR = os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions")
-S3_BUCKET = os.getenv("SNAPSHOTS_S3_BUCKET")
-S3_PREFIX = os.getenv("SNAPSHOTS_S3_PREFIX", "positions/")
-
-IOL_USERNAME = os.getenv("IOL_USERNAME")
-IOL_PASSWORD = os.getenv("IOL_PASSWORD")
-
-PPI_PUBLIC_API_KEY = os.getenv("PPI_PUBLIC_API_KEY")
-PPI_PRIVATE_API_KEY = os.getenv("PPI_PRIVATE_API_KEY")
-PPI_ACCOUNT_NUMBER = os.getenv("PPI_ACCOUNT_NUMBER")
-PPI_API_VERSION = os.getenv("PPI_API_VERSION", DEFAULT_PPI_API_VERSION)
-ENABLE_PPI = _env_as_bool(os.getenv("ENABLE_PPI"))
-PPI_SANDBOX = _env_as_bool(os.getenv("PPI_SANDBOX"))
-
-ACCOUNT_EMAIL = os.getenv("ACCOUNT_EMAIL")
-
-def short_account_id(email: str) -> str:
-    """Return a short, deterministic hash of the email for safe use in paths."""
-    if not email:
-        raise ValueError("ACCOUNT_EMAIL not set in .env")
-    return hashlib.sha1(email.encode()).hexdigest()[:8]
-
-ACCOUNT_ID = short_account_id(ACCOUNT_EMAIL)
-
-SANTANDER_HOLDINGS_FILE = os.getenv(
-    "SANTANDER_HOLDINGS_FILE",
-    os.path.join("data", "manual", "santander_holdings.json"),
+from backend.core.settings import (
+    SSM_ENV_NAME_PATTERN,
+    SSM_ENV_OVERRIDE_VAR,
+    SSM_ENV_PATH_VAR,
+    Settings,
+    _env_as_bool,
+    _load_ssm_environment,
+    load_settings,
+    short_account_id,
 )
 
-CRYPTO_HOLDINGS_FILE = os.getenv(
-    "CRYPTO_HOLDINGS_FILE",
-    os.path.join("data", "manual", "crypto_holdings.json"),
-)
+settings = load_settings()
 
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
-BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", DEFAULT_BINANCE_BASE_URL)
-try:
-    BINANCE_RECV_WINDOW_MS = int(os.getenv("BINANCE_RECV_WINDOW_MS", str(DEFAULT_BINANCE_RECV_WINDOW_MS)))
-except ValueError:
-    BINANCE_RECV_WINDOW_MS = DEFAULT_BINANCE_RECV_WINDOW_MS
-ENABLE_BINANCE = _env_as_bool(os.getenv("ENABLE_BINANCE"))
-BINANCE_BALANCE_LAMBDA = os.getenv("BINANCE_BALANCE_LAMBDA", "fintracker-fetch-binance-balance")
+DEFAULT_BINANCE_BASE_URL = settings.DEFAULT_BINANCE_BASE_URL
+DEFAULT_BINANCE_RECV_WINDOW_MS = settings.DEFAULT_BINANCE_RECV_WINDOW_MS
+DEFAULT_JWT_EXPIRES_MINUTES = settings.DEFAULT_JWT_EXPIRES_MINUTES
+DEFAULT_PPI_API_VERSION = settings.DEFAULT_PPI_API_VERSION
 
-# Ethereum / MetaMask
-ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
-ETHEREUM_WALLET_ADDRESSES = os.getenv("ETHEREUM_WALLET_ADDRESSES", "")
-ETHEREUM_TOKEN_CONTRACTS = os.getenv("ETHEREUM_TOKEN_CONTRACTS", "")
-ENABLE_ETHEREUM = _env_as_bool(os.getenv("ENABLE_ETHEREUM"))
+OUTPUT_DIR = settings.OUTPUT_DIR
+S3_BUCKET = settings.S3_BUCKET
+S3_PREFIX = settings.S3_PREFIX
 
-# Exodus
-EXODUS_ETH_ADDRESSES = os.getenv("EXODUS_ETH_ADDRESSES", "")
-EXODUS_BTC_ADDRESSES = os.getenv("EXODUS_BTC_ADDRESSES", "")
-ENABLE_EXODUS = _env_as_bool(os.getenv("ENABLE_EXODUS"))
+IOL_USERNAME = settings.IOL_USERNAME
+IOL_PASSWORD = settings.IOL_PASSWORD
 
-# MetaMask BTC (Native SegWit)
-METAMASK_BTC_ADDRESSES = os.getenv("METAMASK_BTC_ADDRESSES", "")
-ENABLE_METAMASK_BTC = _env_as_bool(os.getenv("ENABLE_METAMASK_BTC"))
+PPI_PUBLIC_API_KEY = settings.PPI_PUBLIC_API_KEY
+PPI_PRIVATE_API_KEY = settings.PPI_PRIVATE_API_KEY
+PPI_ACCOUNT_NUMBER = settings.PPI_ACCOUNT_NUMBER
+PPI_API_VERSION = settings.PPI_API_VERSION
+ENABLE_PPI = settings.ENABLE_PPI
+PPI_SANDBOX = settings.PPI_SANDBOX
 
-BLOCKCYPHER_API_KEY = os.getenv("BLOCKCYPHER_API_KEY")
+ACCOUNT_EMAIL = settings.ACCOUNT_EMAIL
+ACCOUNT_ID = settings.ACCOUNT_ID
 
-JWT_SECRET = os.getenv("JWT_SECRET")
-DEMO_AUTH_USERNAME = os.getenv("DEMO_AUTH_USERNAME")
-DEMO_AUTH_PASSWORD = os.getenv("DEMO_AUTH_PASSWORD")
-try:
-    JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRES_MINUTES", str(DEFAULT_JWT_EXPIRES_MINUTES)))
-except ValueError:
-    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
-if JWT_EXPIRES_MINUTES <= 0:
-    JWT_EXPIRES_MINUTES = DEFAULT_JWT_EXPIRES_MINUTES
+SANTANDER_HOLDINGS_FILE = settings.SANTANDER_HOLDINGS_FILE
+CRYPTO_HOLDINGS_FILE = settings.CRYPTO_HOLDINGS_FILE
+
+BINANCE_API_KEY = settings.BINANCE_API_KEY
+BINANCE_API_SECRET = settings.BINANCE_API_SECRET
+BINANCE_BASE_URL = settings.BINANCE_BASE_URL
+BINANCE_RECV_WINDOW_MS = settings.BINANCE_RECV_WINDOW_MS
+ENABLE_BINANCE = settings.ENABLE_BINANCE
+BINANCE_BALANCE_LAMBDA = settings.BINANCE_BALANCE_LAMBDA
+
+ETHERSCAN_API_KEY = settings.ETHERSCAN_API_KEY
+ETHEREUM_WALLET_ADDRESSES = settings.ETHEREUM_WALLET_ADDRESSES
+ETHEREUM_TOKEN_CONTRACTS = settings.ETHEREUM_TOKEN_CONTRACTS
+ENABLE_ETHEREUM = settings.ENABLE_ETHEREUM
+
+EXODUS_ETH_ADDRESSES = settings.EXODUS_ETH_ADDRESSES
+EXODUS_BTC_ADDRESSES = settings.EXODUS_BTC_ADDRESSES
+ENABLE_EXODUS = settings.ENABLE_EXODUS
+
+METAMASK_BTC_ADDRESSES = settings.METAMASK_BTC_ADDRESSES
+ENABLE_METAMASK_BTC = settings.ENABLE_METAMASK_BTC
+
+BLOCKCYPHER_API_KEY = settings.BLOCKCYPHER_API_KEY
+
+JWT_SECRET = settings.JWT_SECRET
+DEMO_AUTH_USERNAME = settings.DEMO_AUTH_USERNAME
+DEMO_AUTH_PASSWORD = settings.DEMO_AUTH_PASSWORD
+JWT_EXPIRES_MINUTES = settings.JWT_EXPIRES_MINUTES
