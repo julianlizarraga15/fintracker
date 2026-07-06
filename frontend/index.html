@@ -117,7 +117,8 @@
       }
 
       input[type="text"],
-      input[type="password"] {
+      input[type="password"],
+      input[type="number"] {
         flex: 1;
         min-width: 200px;
         border-radius: 14px;
@@ -129,7 +130,8 @@
       }
 
       input[type="text"]:focus-visible,
-      input[type="password"]:focus-visible {
+      input[type="password"]:focus-visible,
+      input[type="number"]:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
@@ -155,6 +157,51 @@
 
       button:not(:disabled):hover {
         transform: translateY(-1px);
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .panel-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .secondary-button,
+      .danger-button {
+        background: none;
+        border: 1px solid var(--panel-border);
+        color: var(--accent);
+        box-shadow: none;
+      }
+
+      .danger-button {
+        color: var(--danger);
+      }
+
+      .crypto-table input {
+        min-width: 110px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+      }
+
+      .crypto-table input[data-field="quantity"] {
+        min-width: 140px;
+      }
+
+      .crypto-table th:last-child,
+      .crypto-table td:last-child {
+        width: 1%;
+        white-space: nowrap;
       }
 
       .hint {
@@ -556,6 +603,15 @@
           align-items: flex-start;
         }
 
+        .panel-header {
+          flex-direction: column;
+        }
+
+        .panel-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
         table {
           font-size: 0.85rem;
         }
@@ -797,6 +853,40 @@
       </section>
 
       <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin: 0">Manual crypto</h2>
+            <p class="hint" id="crypto-summary">Log in to load holdings.</p>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="secondary-button" id="crypto-load-btn">Load</button>
+            <button type="button" class="secondary-button" id="crypto-add-btn">Add row</button>
+            <button type="button" id="crypto-save-btn">Save</button>
+          </div>
+        </div>
+        <div class="message" id="crypto-feedback" role="status" aria-live="polite"></div>
+        <div class="table-wrapper" role="region" aria-live="polite">
+          <table class="crypto-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Quantity</th>
+                <th>Source</th>
+                <th>Name</th>
+                <th>Currency</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="crypto-body">
+              <tr>
+                <td colspan="6" class="empty-state">Log in to load manual crypto holdings.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
         <header>
           <h2 style="margin: 0">Positions</h2>
           <p class="hint" id="rows-summary">No snapshot loaded yet.</p>
@@ -870,6 +960,12 @@
         okPositions: document.getElementById("ok-positions"),
         rowsBody: document.getElementById("rows-body"),
         rowsSummary: document.getElementById("rows-summary"),
+        cryptoSummary: document.getElementById("crypto-summary"),
+        cryptoFeedback: document.getElementById("crypto-feedback"),
+        cryptoBody: document.getElementById("crypto-body"),
+        cryptoLoadButton: document.getElementById("crypto-load-btn"),
+        cryptoAddButton: document.getElementById("crypto-add-btn"),
+        cryptoSaveButton: document.getElementById("crypto-save-btn"),
         accountInput: document.getElementById("account-id"),
         submitButton: document.getElementById("load-btn"),
         form: document.getElementById("account-form"),
@@ -891,9 +987,14 @@
       };
 
       const STORAGE_KEY = "fintracker.accountId";
+      const AUTH_STORAGE_KEY = "fintracker.auth";
       const REQUEST_TIMEOUT_MS = 30_000;
       const PERCENT_SCALE = 100;
       const TABLE_COLUMN_COUNT = 7;
+      const CRYPTO_TABLE_COLUMN_COUNT = 6;
+      const DEFAULT_CRYPTO_CURRENCY = "USD";
+      const DEFAULT_CRYPTO_MARKET = "crypto";
+      const DEFAULT_CRYPTO_SOURCE = "manual";
       const rawHistoryLabels = [
         "Date",
         "Raw price",
@@ -913,6 +1014,7 @@
       const priceHistoryCache = new Map();
       const chartState = { currencyMode: "base", seriesMode: "raw", symbol: null, history: null };
       let lastBaseCurrency = "";
+      let manualCryptoHoldings = [];
 
       const authState = {
         token: null,
@@ -933,6 +1035,15 @@
         }
       }
 
+      function setCryptoFeedback(message = "", tone = "") {
+        dom.cryptoFeedback.textContent = message;
+        if (message) {
+          dom.cryptoFeedback.dataset.tone = tone;
+        } else {
+          delete dom.cryptoFeedback.dataset.tone;
+        }
+      }
+
       function setLoginFeedback(message = "", tone = "") {
         dom.loginFeedback.textContent = message;
         if (tone) {
@@ -946,11 +1057,52 @@
         return Boolean(authState.token && authState.expiresAt > Date.now());
       }
 
+      function clearStoredAuth() {
+        try {
+          sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        } catch (error) {
+          console.warn("Unable to clear saved auth state.", error);
+        }
+      }
+
+      function persistAuthState() {
+        try {
+          sessionStorage.setItem(
+            AUTH_STORAGE_KEY,
+            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt })
+          );
+        } catch (error) {
+          console.warn("Unable to save auth state for this browser session.", error);
+        }
+      }
+
+      function restoreAuthState() {
+        try {
+          const rawAuth = sessionStorage.getItem(AUTH_STORAGE_KEY);
+          if (!rawAuth) return false;
+          const savedAuth = JSON.parse(rawAuth);
+          const token = typeof savedAuth.token === "string" ? savedAuth.token : "";
+          const expiresAt = Number(savedAuth.expiresAt) || 0;
+          if (!token || expiresAt <= Date.now()) {
+            clearStoredAuth();
+            return false;
+          }
+          authState.token = token;
+          authState.expiresAt = expiresAt;
+          return true;
+        } catch (error) {
+          clearStoredAuth();
+          return false;
+        }
+      }
+
       function clearAuthState(message) {
         authState.token = null;
         authState.expiresAt = 0;
+        clearStoredAuth();
         priceHistoryCache.clear();
         lastBaseCurrency = "";
+        resetManualCryptoView();
         if (message) {
           setLoginFeedback(message, "error");
         }
@@ -974,8 +1126,10 @@
           authState.token = payload.access_token;
           const expiresInSeconds = Number(payload.expires_in) || 0;
           authState.expiresAt = Date.now() + expiresInSeconds * 1000;
+          persistAuthState();
           setLoginFeedback("Authenticated.", "success");
           setStatus("Authenticated", "ready");
+          loadManualCryptoHoldings();
           const detectedAccountId = (payload.account_id || "").trim();
           let accountIdToLoad = dom.accountInput.value.trim();
           if (!accountIdToLoad && detectedAccountId) {
@@ -1775,6 +1929,216 @@
         setStatus("Auth required", "error");
       }
 
+      function emptyCryptoHolding() {
+        return {
+          symbol: "",
+          quantity: "",
+          source: DEFAULT_CRYPTO_SOURCE,
+          display_name: "",
+          currency: DEFAULT_CRYPTO_CURRENCY,
+          market: DEFAULT_CRYPTO_MARKET,
+        };
+      }
+
+      function setCryptoButtonsDisabled(disabled) {
+        dom.cryptoLoadButton.disabled = disabled;
+        dom.cryptoAddButton.disabled = disabled;
+        dom.cryptoSaveButton.disabled = disabled;
+      }
+
+      function resetManualCryptoView() {
+        manualCryptoHoldings = [];
+        dom.cryptoBody.innerHTML =
+          `<tr><td colspan="${CRYPTO_TABLE_COLUMN_COUNT}" class="empty-state">Log in to load manual crypto holdings.</td></tr>`;
+        dom.cryptoSummary.textContent = "Log in to load holdings.";
+        setCryptoFeedback();
+      }
+
+      function cryptoInput(rowIndex, field, value, label, type = "text") {
+        const input = document.createElement("input");
+        input.type = type;
+        input.value = value ?? "";
+        input.dataset.rowIndex = String(rowIndex);
+        input.dataset.field = field;
+        input.setAttribute("aria-label", label);
+        if (type === "number") {
+          input.min = "0";
+          input.step = "any";
+        }
+        return input;
+      }
+
+      function renderManualCryptoHoldings(holdings) {
+        manualCryptoHoldings = holdings.map((holding) => ({
+          ...emptyCryptoHolding(),
+          ...holding,
+          quantity: holding.quantity ?? "",
+        }));
+        dom.cryptoBody.replaceChildren();
+        if (!manualCryptoHoldings.length) {
+          dom.cryptoBody.innerHTML =
+            `<tr><td colspan="${CRYPTO_TABLE_COLUMN_COUNT}" class="empty-state">No manual crypto holdings saved.</td></tr>`;
+          dom.cryptoSummary.textContent = "0 manual holdings.";
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        manualCryptoHoldings.forEach((holding, index) => {
+          const tr = document.createElement("tr");
+          tr.dataset.rowIndex = String(index);
+
+          const fields = [
+            ["Symbol", cryptoInput(index, "symbol", holding.symbol, "Symbol")],
+            ["Quantity", cryptoInput(index, "quantity", holding.quantity, "Quantity", "number")],
+            ["Source", cryptoInput(index, "source", holding.source, "Source")],
+            ["Name", cryptoInput(index, "display_name", holding.display_name, "Display name")],
+            ["Currency", cryptoInput(index, "currency", holding.currency, "Currency")],
+          ];
+
+          fields.forEach(([label, input]) => {
+            const td = document.createElement("td");
+            td.dataset.label = label;
+            td.appendChild(input);
+            tr.appendChild(td);
+          });
+
+          const actionCell = document.createElement("td");
+          actionCell.dataset.label = "Actions";
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.className = "danger-button";
+          removeButton.dataset.removeCryptoRow = String(index);
+          removeButton.setAttribute("aria-label", `Remove row ${index + 1}`);
+          removeButton.textContent = "Remove";
+          actionCell.appendChild(removeButton);
+          tr.appendChild(actionCell);
+
+          fragment.appendChild(tr);
+        });
+        dom.cryptoBody.appendChild(fragment);
+        dom.cryptoSummary.textContent = `${manualCryptoHoldings.length} manual holding${
+          manualCryptoHoldings.length === 1 ? "" : "s"
+        }.`;
+      }
+
+      function readManualCryptoRows() {
+        const rows = Array.from(dom.cryptoBody.querySelectorAll("tr"));
+        return rows
+          .map((row) => {
+            const values = {};
+            row.querySelectorAll("input[data-field]").forEach((input) => {
+              values[input.dataset.field] = input.value.trim();
+            });
+            if (!Object.keys(values).length) return null;
+            const original = manualCryptoHoldings[Number(row.dataset.rowIndex)] || {};
+            const holding = {
+              symbol: values.symbol.toUpperCase(),
+              quantity: Number(values.quantity),
+              source: values.source || DEFAULT_CRYPTO_SOURCE,
+              display_name: values.display_name || null,
+              currency: (values.currency || DEFAULT_CRYPTO_CURRENCY).toUpperCase(),
+              market: original.market || DEFAULT_CRYPTO_MARKET,
+            };
+            if (original.account_id) {
+              holding.account_id = original.account_id;
+            }
+            return holding;
+          })
+          .filter(Boolean);
+      }
+
+      function validateManualCryptoRows(rows) {
+        for (const row of rows) {
+          if (!row.symbol) {
+            throw new Error("Each row needs a symbol.");
+          }
+          if (!Number.isFinite(row.quantity) || row.quantity <= 0) {
+            throw new Error(`Quantity for ${row.symbol} must be greater than zero.`);
+          }
+          if (!row.source) {
+            throw new Error(`Source for ${row.symbol} is required.`);
+          }
+          if (!row.currency) {
+            throw new Error(`Currency for ${row.symbol} is required.`);
+          }
+        }
+      }
+
+      async function loadManualCryptoHoldings() {
+        if (!ensureAuthenticated()) {
+          setCryptoFeedback("Please log in before loading manual crypto holdings.", "error");
+          return;
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        setCryptoButtonsDisabled(true);
+        setCryptoFeedback("Loading manual crypto holdings...");
+        try {
+          const response = await fetch("/api/manual/crypto-holdings", {
+            headers: authHeaders(),
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            if (response.status === 401) {
+              handleUnauthorized();
+            }
+            const detail = await response.json().catch(() => ({}));
+            throw new Error(detail.detail || `Request failed with status ${response.status}`);
+          }
+          const payload = await response.json();
+          renderManualCryptoHoldings(payload.holdings || []);
+          setCryptoFeedback("Manual crypto holdings loaded.", "success");
+        } catch (error) {
+          setCryptoFeedback(error.name === "AbortError" ? "Request timed out." : error.message, "error");
+        } finally {
+          setCryptoButtonsDisabled(false);
+          clearTimeout(timeout);
+        }
+      }
+
+      async function saveManualCryptoHoldings() {
+        if (!ensureAuthenticated()) {
+          setCryptoFeedback("Please log in before saving manual crypto holdings.", "error");
+          return;
+        }
+        let rows;
+        try {
+          rows = readManualCryptoRows();
+          validateManualCryptoRows(rows);
+        } catch (error) {
+          setCryptoFeedback(error.message || "Check the manual crypto rows.", "error");
+          return;
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        setCryptoButtonsDisabled(true);
+        setCryptoFeedback("Saving manual crypto holdings...");
+        try {
+          const response = await fetch("/api/manual/crypto-holdings", {
+            method: "PUT",
+            headers: { ...authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ holdings: rows }),
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            if (response.status === 401) {
+              handleUnauthorized();
+            }
+            const detail = await response.json().catch(() => ({}));
+            throw new Error(detail.detail || `Save failed with status ${response.status}`);
+          }
+          const payload = await response.json();
+          renderManualCryptoHoldings(payload.holdings || []);
+          setCryptoFeedback("Manual crypto holdings saved.", "success");
+        } catch (error) {
+          setCryptoFeedback(error.name === "AbortError" ? "Save timed out." : error.message, "error");
+        } finally {
+          setCryptoButtonsDisabled(false);
+          clearTimeout(timeout);
+        }
+      }
+
       async function loadSnapshot(accountId) {
         if (!ensureAuthenticated()) {
           setFeedback("Please log in before loading a snapshot.", "error");
@@ -1857,13 +2221,52 @@
         authenticate(username, password);
       });
 
+      dom.cryptoLoadButton.addEventListener("click", loadManualCryptoHoldings);
+      dom.cryptoSaveButton.addEventListener("click", saveManualCryptoHoldings);
+      dom.cryptoAddButton.addEventListener("click", () => {
+        manualCryptoHoldings.push(emptyCryptoHolding());
+        renderManualCryptoHoldings(manualCryptoHoldings);
+        setCryptoFeedback();
+      });
+      dom.cryptoBody.addEventListener("input", (event) => {
+        const input = event.target.closest("input[data-field]");
+        if (!input) return;
+        const rowIndex = Number(input.dataset.rowIndex);
+        if (!Number.isInteger(rowIndex) || !manualCryptoHoldings[rowIndex]) return;
+        manualCryptoHoldings[rowIndex][input.dataset.field] = input.value;
+      });
+      dom.cryptoBody.addEventListener("click", (event) => {
+        const removeButton = event.target.closest("[data-remove-crypto-row]");
+        if (!removeButton) return;
+        const rowIndex = Number(removeButton.dataset.removeCryptoRow);
+        if (!Number.isInteger(rowIndex)) return;
+        manualCryptoHoldings.splice(rowIndex, 1);
+        renderManualCryptoHoldings(manualCryptoHoldings);
+        setCryptoFeedback();
+      });
+
       (function bootstrap() {
+        const restoredAuth = restoreAuthState();
         const savedAccount = localStorage.getItem(STORAGE_KEY);
         if (savedAccount) {
           dom.accountInput.value = savedAccount;
-          setFeedback("Account id restored. Log in and load the snapshot when ready.");
+          if (restoredAuth) {
+            setLoginFeedback("Authenticated for this browser session.", "success");
+            setStatus("Authenticated", "ready");
+            setFeedback("Account id restored. Load the snapshot when ready.");
+            loadManualCryptoHoldings();
+          } else {
+            setFeedback("Account id restored. Log in and load the snapshot when ready.");
+          }
         } else {
-          setFeedback("Log in, then enter an account id to get started.");
+          if (restoredAuth) {
+            setLoginFeedback("Authenticated for this browser session.", "success");
+            setStatus("Authenticated", "ready");
+            setFeedback("Enter an account id to get started.");
+            loadManualCryptoHoldings();
+          } else {
+            setFeedback("Log in, then enter an account id to get started.");
+          }
         }
       })();
 

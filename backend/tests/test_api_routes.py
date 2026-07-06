@@ -23,9 +23,17 @@ def test_refactored_routes_are_registered_with_original_paths():
     assert "/jobs/{job_name}/latest" in route_paths
     assert "/jobs/{job_name}/history" in route_paths
     assert "/prices/history" in route_paths
+    assert "/manual/crypto-holdings" in route_paths
 
 
-def test_login_route_still_issues_bearer_token():
+def test_login_route_still_issues_bearer_token(monkeypatch):
+    from backend.app.routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router.config, "DEMO_AUTH_USERNAME", "demo")
+    monkeypatch.setattr(auth_router.config, "DEMO_AUTH_PASSWORD", "password")
+    monkeypatch.setattr(auth_router.config, "JWT_SECRET", "test-secret")
+    monkeypatch.setattr(auth_router.config, "JWT_EXPIRES_MINUTES", 15)
+
     response = login(LoginRequest(username="demo", password="password"))
 
     assert response.token_type == "bearer"

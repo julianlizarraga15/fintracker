@@ -126,7 +126,7 @@ The authenticated job dashboard can also trigger an ad hoc valuation run with `P
 
 ## Public Demo Auth + TLS
 - **Configure secrets via env/secret store**: set `DEMO_AUTH_USERNAME`, `DEMO_AUTH_PASSWORD`, `JWT_SECRET`, and optionally override `JWT_EXPIRES_MINUTES` before the backend container boots. Keep these out of git and rotate `JWT_SECRET` if compromised.
-- **Frontend auth flow**: the SPA now shows a login form, calls `/api/auth/login`, keeps the JWT in memory, attaches it to `/api/valuations/latest` fetches, and clears it on any `401` so the user is prompted to log back in.
+- **Frontend auth flow**: the SPA now shows a login form, calls `/api/auth/login`, keeps the JWT in `sessionStorage` for the current browser tab, attaches it to authenticated fetches, and clears it on any `401` so the user is prompted to log back in.
 - **Nginx with TLS**: the `nginx` service listens on `80` (HTTP) and `443` (HTTPS). Port 80 only redirects to HTTPS. Place your Let’s Encrypt certs/keys under `./tls` (ignored by git) so they mount at `/etc/nginx/tls/` and keep the actual domain (e.g., `$PUBLIC_DOMAIN`) outside of the repo. A typical host setup:
   ```bash
   export PUBLIC_DOMAIN=demo.example.com

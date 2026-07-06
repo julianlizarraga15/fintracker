@@ -304,6 +304,7 @@
       };
 
       const authState = { token: null, expiresAt: 0 };
+      const AUTH_STORAGE_KEY = "fintracker.auth";
       const HOUR_MS = 60 * 60 * 1000;
       const JOB_STALE_AFTER_HOURS = 36;
       const JOB_STALE_AFTER_MS = JOB_STALE_AFTER_HOURS * HOUR_MS;
@@ -319,6 +320,51 @@
 
       function hasToken() {
         return Boolean(authState.token && authState.expiresAt > Date.now());
+      }
+
+      function clearStoredAuth() {
+        try {
+          sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        } catch (error) {
+          console.warn("Unable to clear saved auth state.", error);
+        }
+      }
+
+      function clearAuthState() {
+        authState.token = null;
+        authState.expiresAt = 0;
+        clearStoredAuth();
+      }
+
+      function persistAuthState() {
+        try {
+          sessionStorage.setItem(
+            AUTH_STORAGE_KEY,
+            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt })
+          );
+        } catch (error) {
+          console.warn("Unable to save auth state for this browser session.", error);
+        }
+      }
+
+      function restoreAuthState() {
+        try {
+          const rawAuth = sessionStorage.getItem(AUTH_STORAGE_KEY);
+          if (!rawAuth) return false;
+          const savedAuth = JSON.parse(rawAuth);
+          const token = typeof savedAuth.token === "string" ? savedAuth.token : "";
+          const expiresAt = Number(savedAuth.expiresAt) || 0;
+          if (!token || expiresAt <= Date.now()) {
+            clearAuthState();
+            return false;
+          }
+          authState.token = token;
+          authState.expiresAt = expiresAt;
+          return true;
+        } catch (error) {
+          clearAuthState();
+          return false;
+        }
       }
 
       function headers() {
@@ -363,6 +409,9 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
+          if (response.status === 401) {
+            clearAuthState();
+          }
           throw new Error(payload.detail || `Request failed with status ${response.status}`);
         }
         return payload;
@@ -381,11 +430,12 @@
           if (!response.ok) throw new Error(payload.detail || "Login failed.");
           authState.token = payload.access_token;
           authState.expiresAt = Date.now() + (Number(payload.expires_in) || 0) * 1000;
+          persistAuthState();
           dom.password.value = "";
           setFeedback("Authenticated. Loading job dashboard…", "success");
           await loadDashboard();
         } catch (error) {
-          authState.token = null;
+          clearAuthState();
           setFeedback(error.message || "Could not authenticate.", "danger");
         } finally {
           dom.loginButton.disabled = false;
@@ -559,6 +609,13 @@
       });
       dom.refreshButton.addEventListener("click", loadDashboard);
       dom.runButton.addEventListener("click", triggerValuationJob);
+
+      (function bootstrap() {
+        if (restoreAuthState()) {
+          setFeedback("Authenticated for this browser session. Loading job dashboard…", "success");
+          loadDashboard();
+        }
+      })();
     </script>
   </body>
 </html>

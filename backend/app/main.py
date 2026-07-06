@@ -22,6 +22,7 @@ from backend.app.routers.auth import (
     router as auth_router,
 )
 from backend.app.routers.jobs import job_run_history, latest_job_run, router as jobs_router
+from backend.app.routers.manual_crypto import router as manual_crypto_router
 from backend.app.routers.prices import price_history, router as prices_router
 from backend.app.routers.valuations import latest_valuations, router as valuations_router
 from backend.app.security import (
@@ -57,3 +58,4 @@ app.include_router(auth_router)
 app.include_router(valuations_router)
 app.include_router(jobs_router)
 app.include_router(prices_router)
+app.include_router(manual_crypto_router)
