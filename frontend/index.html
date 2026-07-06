@@ -405,8 +405,10 @@
       }
 
       .modal__dialog {
-        width: min(92vw, 820px);
-        background: rgba(5, 6, 10, 0.92);
+        width: min(96vw, 1100px);
+        max-height: calc(100vh - 32px);
+        overflow: auto;
+        background: #05060a;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
         padding: 18px;
@@ -515,12 +517,14 @@
       .modal__raw {
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
-        overflow-x: auto;
+        max-height: min(36vh, 360px);
+        overflow: auto;
         -webkit-overflow-scrolling: touch;
       }
 
       .modal__raw-table {
         min-width: 860px;
+        width: 100%;
       }
 
       .modal__raw-table th,
