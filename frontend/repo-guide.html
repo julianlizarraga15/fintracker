@@ -153,6 +153,21 @@
         min-width: 0;
       }
 
+      button.artifact {
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      button.artifact:hover,
+      button.artifact:focus-visible,
+      button.artifact[aria-pressed="true"] {
+        border-color: #4f6880;
+        background: #182433;
+        outline: none;
+      }
+
       .node strong,
       .source strong,
       .artifact strong,
@@ -270,6 +285,37 @@
         overflow-x: auto;
         border: 1px solid var(--border);
         border-radius: var(--radius);
+      }
+
+      .output-example {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-muted);
+        padding: 12px;
+      }
+
+      .output-example__head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .output-example__title {
+        font-weight: 700;
+      }
+
+      .output-example pre {
+        margin: 0;
+        overflow-x: auto;
+        white-space: pre;
+        color: #d9f8ff;
+        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 0.78rem;
+        line-height: 1.45;
       }
 
       table {
@@ -676,30 +722,40 @@
           </div>
 
           <div class="artifacts-grid" aria-label="Saved artifacts">
-            <div class="artifact data">
+            <button class="artifact data" type="button" data-output="positions" aria-pressed="true">
               <strong>Positions</strong>
               <span><code>data/positions/dt=...</code></span>
-            </div>
-            <div class="artifact data">
+            </button>
+            <button class="artifact data" type="button" data-output="prices" aria-pressed="false">
               <strong>Prices</strong>
               <span><code>data/prices/dt=...</code></span>
-            </div>
-            <div class="artifact data">
+            </button>
+            <button class="artifact data" type="button" data-output="fx" aria-pressed="false">
               <strong>FX</strong>
               <span><code>data/fx/dt=...</code></span>
-            </div>
-            <div class="artifact data">
+            </button>
+            <button class="artifact data" type="button" data-output="valuations" aria-pressed="false">
               <strong>Valuations</strong>
               <span><code>data/valuations/dt=...</code></span>
-            </div>
-            <div class="artifact job">
+            </button>
+            <button class="artifact job" type="button" data-output="job-json" aria-pressed="false">
               <strong>Job JSON</strong>
               <span><code>latest.json</code> + history</span>
-            </div>
-            <div class="artifact job">
+            </button>
+            <button class="artifact job" type="button" data-output="job-logs" aria-pressed="false">
               <strong>Job logs</strong>
               <span><code>*.log</code> per run</span>
+            </button>
+          </div>
+
+          <div class="output-example" aria-live="polite">
+            <div class="output-example__head">
+              <span class="output-example__title" id="output-example-title">Positions example</span>
+              <code id="output-example-path">data/positions/dt=2026-07-06/source=iol/account=.../positions_2026-07-06_160001.csv</code>
             </div>
+            <pre id="output-example-code">symbol,source,account_id,currency,quantity,price,valuation
+AL30,iol,account-hash,ARS,10,58000,580000
+BTC,manual,account-hash,USD,0.25,,</pre>
           </div>
         </section>
 
@@ -847,5 +903,87 @@
         </div>
       </section>
     </main>
+    <script>
+      const outputExamples = {
+        positions: {
+          title: "Positions example",
+          path: "data/positions/dt=2026-07-06/source=iol/account=.../positions_2026-07-06_160001.csv",
+          code: [
+            "symbol,source,account_id,currency,quantity,price,valuation",
+            "AL30,iol,account-hash,ARS,10,58000,580000",
+            "BTC,manual,account-hash,USD,0.25,,",
+          ].join("\n"),
+        },
+        prices: {
+          title: "Prices example",
+          path: "data/prices/dt=2026-07-06/prices_2026-07-06_160003.csv",
+          code: [
+            "symbol,price_type,price,currency,venue,source,quality_score",
+            "AL30,last,58.00,ARS,IOL,iol,90",
+            "BTC,last,62000.00,USD,CoinGecko,coingecko,80",
+          ].join("\n"),
+        },
+        fx: {
+          title: "FX example",
+          path: "data/fx/dt=2026-07-06/source=dolarapi_blue_venta/fx_2026-07-06_160004.csv",
+          code: [
+            "from_ccy,to_ccy,rate,source",
+            "ARS,USD,0.00082,dolarapi_blue_venta",
+            "USDT,USD,1.0,binance_usdt_peg",
+          ].join("\n"),
+        },
+        valuations: {
+          title: "Valuations example",
+          path: "data/valuations/dt=2026-07-06/account=.../valuations_2026-07-06_160005.csv",
+          code: [
+            "symbol,source,quantity,value_ccy,value_base_ccy,base_currency",
+            "AL30,iol,10,580000,475.60,USD",
+            "BTC,manual,0.25,15500.00,15500.00,USD",
+          ].join("\n"),
+        },
+        "job-json": {
+          title: "Job JSON example",
+          path: "data/job_runs/valuations/latest.json",
+          code: [
+            "{",
+            '  "job": "valuations",',
+            '  "status": "success",',
+            '  "positions_count": 18,',
+            '  "valuations_saved": true',
+            "}",
+          ].join("\n"),
+        },
+        "job-logs": {
+          title: "Job log example",
+          path: "data/job_runs/valuations/2026-07-06_160000.log",
+          code: [
+            "Loaded 8 PPI positions.",
+            "[positions] CSV saved -> data/positions/dt=2026-07-06/...",
+            "[valuations] Parquet saved -> data/valuations/dt=2026-07-06/...",
+            "[job-run] Recorded status -> data/job_runs/valuations/2026-07-06_160000.json",
+          ].join("\n"),
+        },
+      };
+
+      const outputButtons = document.querySelectorAll("[data-output]");
+      const exampleTitle = document.querySelector("#output-example-title");
+      const examplePath = document.querySelector("#output-example-path");
+      const exampleCode = document.querySelector("#output-example-code");
+
+      outputButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const example = outputExamples[button.dataset.output];
+          if (!example) {
+            return;
+          }
+
+          outputButtons.forEach((item) => item.setAttribute("aria-pressed", "false"));
+          button.setAttribute("aria-pressed", "true");
+          exampleTitle.textContent = example.title;
+          examplePath.textContent = example.path;
+          exampleCode.textContent = example.code;
+        });
+      });
+    </script>
   </body>
 </html>

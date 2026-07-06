@@ -210,9 +210,6 @@ __marimo__/
 data/
 *.csv
 
-# Docs for AI agents
-AGENTS.md
-
 # TLS assets deployed to nginx container
 tls/
 .aider*
