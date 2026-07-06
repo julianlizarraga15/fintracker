@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Fintracker | Repo Guide</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #080b10;
+        color: #eef3f8;
+        --bg: #080b10;
+        --surface: #101720;
+        --surface-soft: #141e29;
+        --surface-muted: #0d131b;
+        --border: #243241;
+        --text: #eef3f8;
+        --muted: #99a8b8;
+        --cyan: #66d9ef;
+        --green: #78e08f;
+        --yellow: #f7d774;
+        --coral: #ff8f7a;
+        --violet: #b8a6ff;
+        --blue: #85b7ff;
+        --radius: 8px;
+        --gap: 14px;
+        --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(180deg, rgba(102, 217, 239, 0.08), transparent 260px),
+          var(--bg);
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--gap);
+        align-items: end;
+        margin-bottom: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.7rem, 3vw, 2.5rem);
+        line-height: 1.05;
+      }
+
+      h2 {
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      h3 {
+        font-size: 0.95rem;
+      }
+
+      code {
+        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 0.86em;
+        color: #d9f8ff;
+        overflow-wrap: anywhere;
+      }
+
+      .badge-row,
+      .legend,
+      .mini-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .badge {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 10px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 0.84rem;
+        white-space: nowrap;
+      }
+
+      .grid {
+        display: grid;
+        gap: var(--gap);
+      }
+
+      .grid.two {
+        grid-template-columns: 1fr;
+      }
+
+      .grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .panel {
+        background: rgba(16, 23, 32, 0.92);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 16px;
+        min-width: 0;
+      }
+
+      .panel + .panel,
+      .grid + .grid,
+      .topbar + .grid {
+        margin-top: var(--gap);
+      }
+
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .node,
+      .source,
+      .artifact,
+      .route,
+      .step {
+        position: relative;
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--cyan);
+        border-radius: var(--radius);
+        background: var(--surface-soft);
+        padding: 12px;
+        min-width: 0;
+      }
+
+      .node strong,
+      .source strong,
+      .artifact strong,
+      .route strong,
+      .step strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .node span,
+      .source span,
+      .artifact span,
+      .route span,
+      .step span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .node.frontend,
+      .source.manual,
+      .artifact.job {
+        border-left-color: var(--green);
+      }
+
+      .node.backend,
+      .source.broker,
+      .artifact.data {
+        border-left-color: var(--blue);
+      }
+
+      .node.proxy,
+      .source.crypto,
+      .route {
+        border-left-color: var(--yellow);
+      }
+
+      .node.store,
+      .source.wallet,
+      .step.deploy {
+        border-left-color: var(--violet);
+      }
+
+      .source.optional,
+      .step.timer {
+        border-left-color: var(--coral);
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(118px, 1fr));
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .flow.compact {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .flow > * {
+        min-height: 84px;
+      }
+
+      .arrow {
+        position: relative;
+      }
+
+      .arrow::after {
+        content: "->";
+        position: absolute;
+        top: 50%;
+        right: -15px;
+        transform: translateY(-50%);
+        color: var(--muted);
+        font-weight: 700;
+        font-size: 0.84rem;
+      }
+
+      .arrow:last-child::after {
+        content: "";
+      }
+
+      .flow.compact .arrow::after {
+        content: "";
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .mini {
+        border: 1px dashed #314356;
+        border-radius: var(--radius);
+        padding: 9px;
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .sources-grid,
+      .artifacts-grid,
+      .routes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 10px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 620px;
+      }
+
+      th,
+      td {
+        padding: 11px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+        font-size: 0.9rem;
+      }
+
+      th {
+        color: var(--muted);
+        background: var(--surface-muted);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .pill {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 8px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 0.78rem;
+      }
+
+      .tip {
+        cursor: help;
+      }
+
+      .tip::before {
+        content: "";
+        display: none;
+      }
+
+      .tip::after {
+        content: attr(data-tip);
+        position: absolute;
+        z-index: 10;
+        left: 12px;
+        top: calc(100% + 8px);
+        width: min(260px, 80vw);
+        padding: 8px 9px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #0b1118;
+        color: var(--muted);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+        font-size: 0.78rem;
+        line-height: 1.35;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.12s ease, transform 0.12s ease;
+      }
+
+      .tip:hover::after,
+      .tip:focus-visible::after {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .repo-map {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+        gap: 10px;
+      }
+
+      .folder {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-muted);
+        padding: 12px;
+      }
+
+      .folder strong {
+        color: var(--cyan);
+      }
+
+      .folder span {
+        display: block;
+        color: var(--muted);
+        margin-top: 5px;
+        font-size: 0.84rem;
+      }
+
+      .note {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 9px;
+        align-items: start;
+        padding: 10px;
+        border: 1px solid #344a5f;
+        border-radius: var(--radius);
+        background: #0a121a;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .note strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 980px) {
+        .grid.two,
+        .grid.three {
+          grid-template-columns: 1fr;
+        }
+
+        .flow,
+        .flow.compact {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .arrow::after {
+          content: "v";
+          top: auto;
+          right: 50%;
+          bottom: -19px;
+          transform: translateX(50%);
+        }
+
+        .flow > * {
+          min-height: auto;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page {
+          width: min(100% - 20px, 1180px);
+          padding-top: 18px;
+        }
+
+        .topbar {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          padding: 12px;
+        }
+
+        .split {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div>
+          <h1>Fintracker Repo Guide</h1>
+        </div>
+        <div class="badge-row" aria-label="Guide facts">
+          <span class="badge">Static page</span>
+          <span class="badge">No live API calls</span>
+          <span class="badge">Job: <code>valuations</code></span>
+        </div>
+      </header>
+
+      <section class="panel" aria-labelledby="system-map">
+        <div class="section-title">
+          <h2 id="system-map">System Map</h2>
+          <span class="pill">request path + storage</span>
+        </div>
+
+        <div class="flow" aria-label="High-level system flow">
+          <div
+            class="node arrow tip"
+            tabindex="0"
+            data-tip="Loads the static frontend and sends authenticated API requests."
+          >
+            <strong>Browser</strong>
+            <span>Valuations UI<br />Jobs UI</span>
+          </div>
+
+          <div
+            class="node proxy arrow tip"
+            tabindex="0"
+            data-tip="Terminates HTTPS, serves frontend traffic, and forwards /api/ to FastAPI."
+          >
+            <strong>Nginx</strong>
+            <span><code>/</code> -> frontend<br /><code>/api/</code> -> backend</span>
+          </div>
+
+          <div
+            class="node frontend arrow tip"
+            tabindex="0"
+            data-tip="Plain HTML pages served by the frontend container."
+          >
+            <strong>Frontend</strong>
+            <span><code>index.html</code><br /><code>jobs.html</code></span>
+          </div>
+
+          <div
+            class="node backend arrow tip"
+            tabindex="0"
+            data-tip="Reads latest saved snapshots and job JSON, then returns API responses."
+          >
+            <strong>Backend</strong>
+            <span>FastAPI routes<br />snapshot readers</span>
+          </div>
+
+          <div
+            class="node store tip"
+            tabindex="0"
+            data-tip="Docker mounts ./data into the backend container as /app/data."
+          >
+            <strong><code>data/</code></strong>
+            <span>snapshots<br />job runs</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid two">
+        <section class="panel" aria-labelledby="daily-flow">
+          <div class="section-title">
+            <h2 id="daily-flow">Daily Valuation Flow</h2>
+            <span class="pill">daily at 16:00 UTC</span>
+          </div>
+
+          <div class="flow compact" aria-label="Scheduled valuation job flow">
+            <div
+              class="step timer arrow tip"
+              tabindex="0"
+              data-tip="Systemd units live on the EC2 host, not in this repo."
+            >
+              <strong>systemd timer</strong>
+              <span><code>16:00 UTC</code></span>
+            </div>
+
+            <div
+              class="step arrow tip"
+              tabindex="0"
+              data-tip="Runs inside the backend container named fintracker-backend."
+            >
+              <strong>docker exec</strong>
+              <span><code>fintracker-backend</code></span>
+            </div>
+
+            <div
+              class="step arrow tip"
+              tabindex="0"
+              data-tip="Loads local/container env config if present, then delegates to the status wrapper."
+            >
+              <strong>run script</strong>
+              <span><code>run_valuations.sh</code></span>
+            </div>
+
+            <div
+              class="step arrow tip"
+              tabindex="0"
+              data-tip="Captures stdout to a log and writes latest/history job JSON."
+            >
+              <strong>status wrapper</strong>
+              <span><code>run_valuations_with_status.sh</code></span>
+            </div>
+
+            <div
+              class="step arrow tip"
+              tabindex="0"
+              data-tip="Fetches positions/prices/FX, computes valuations, and saves snapshots."
+            >
+              <strong>snapshot job</strong>
+              <span><code>backend.core.daily_snapshot</code></span>
+            </div>
+
+            <div
+              class="step tip"
+              tabindex="0"
+              data-tip="The jobs dashboard reads these files through FastAPI."
+            >
+              <strong>status files</strong>
+              <span><code>data/job_runs/valuations/</code></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="repo-shape">
+          <div class="section-title">
+            <h2 id="repo-shape">Repo Shape</h2>
+            <span class="pill">main folders</span>
+          </div>
+
+          <div class="repo-map" aria-label="Repository folders">
+            <div class="folder">
+              <strong><code>backend/</code></strong>
+              <span>API, source clients, transforms, valuation logic.</span>
+            </div>
+            <div class="folder">
+              <strong><code>frontend/</code></strong>
+              <span>Static pages served by the frontend container.</span>
+            </div>
+            <div class="folder">
+              <strong><code>scripts/</code></strong>
+              <span>Manual and scheduled helper commands.</span>
+            </div>
+            <div class="folder">
+              <strong><code>.github/</code></strong>
+              <span>Build, push, and deploy workflow.</span>
+            </div>
+          </div>
+
+          <div class="note" style="margin-top: 10px">
+            <strong>Config</strong>
+            <span><code>.env</code> is local/container env config. This guide does not include secrets or values.</span>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="sources">
+        <div class="section-title">
+          <h2 id="sources">Sources</h2>
+          <span class="pill">inputs to the daily job</span>
+        </div>
+
+        <div class="sources-grid" aria-label="Data sources">
+          <div
+            class="source broker tip"
+            tabindex="0"
+            data-tip="Uses IOL credentials to fetch broker positions, prices, and FX rates."
+          >
+            <strong>IOL</strong>
+            <span>positions, prices, FX</span>
+          </div>
+          <div
+            class="source broker tip"
+            tabindex="0"
+            data-tip="Enabled by config; portfolio payload can include both positions and prices."
+          >
+            <strong>PPI</strong>
+            <span>positions + payload prices</span>
+          </div>
+          <div
+            class="source crypto tip"
+            tabindex="0"
+            data-tip="Can read balances through a Lambda or direct API credentials."
+          >
+            <strong>Binance</strong>
+            <span>spot balances + prices</span>
+          </div>
+          <div
+            class="source wallet tip"
+            tabindex="0"
+            data-tip="Reads native ETH and ERC-20 balances for configured wallet addresses."
+          >
+            <strong>Ethereum wallets</strong>
+            <span>ETH + ERC-20 balances</span>
+          </div>
+          <div
+            class="source wallet tip"
+            tabindex="0"
+            data-tip="Optional configured address lists are folded into the same valuation flow."
+          >
+            <strong>Exodus / MetaMask</strong>
+            <span>BTC and wallet assets</span>
+          </div>
+          <div
+            class="source manual tip"
+            tabindex="0"
+            data-tip="Manual holding quantities are combined with Santander fund NAV prices."
+          >
+            <strong>Santander manual</strong>
+            <span><code>data/manual/santander_holdings.json</code></span>
+          </div>
+          <div
+            class="source manual tip"
+            tabindex="0"
+            data-tip="Manual crypto quantities are priced through the crypto price flow."
+          >
+            <strong>Manual crypto</strong>
+            <span><code>data/manual/crypto_holdings.json</code></span>
+          </div>
+          <div
+            class="source optional tip"
+            tabindex="0"
+            data-tip="If configured, snapshot files can be uploaded after local writes."
+          >
+            <strong>S3</strong>
+            <span>optional snapshot copy</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid two">
+        <section class="panel" aria-labelledby="outputs">
+          <div class="section-title">
+            <h2 id="outputs">Outputs</h2>
+            <span class="pill">written by jobs</span>
+          </div>
+
+          <div class="artifacts-grid" aria-label="Saved artifacts">
+            <div class="artifact data">
+              <strong>Positions</strong>
+              <span><code>data/positions/dt=...</code></span>
+            </div>
+            <div class="artifact data">
+              <strong>Prices</strong>
+              <span><code>data/prices/dt=...</code></span>
+            </div>
+            <div class="artifact data">
+              <strong>FX</strong>
+              <span><code>data/fx/dt=...</code></span>
+            </div>
+            <div class="artifact data">
+              <strong>Valuations</strong>
+              <span><code>data/valuations/dt=...</code></span>
+            </div>
+            <div class="artifact job">
+              <strong>Job JSON</strong>
+              <span><code>latest.json</code> + history</span>
+            </div>
+            <div class="artifact job">
+              <strong>Job logs</strong>
+              <span><code>*.log</code> per run</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="api">
+          <div class="section-title">
+            <h2 id="api">API Surface</h2>
+            <span class="pill">FastAPI</span>
+          </div>
+
+          <div class="routes-grid" aria-label="Backend routes">
+            <div class="route">
+              <strong><code>POST /auth/login</code></strong>
+              <span>JWT for the frontend</span>
+            </div>
+            <div class="route">
+              <strong><code>GET /valuations/latest</code></strong>
+              <span>latest portfolio snapshot</span>
+            </div>
+            <div class="route">
+              <strong><code>GET /jobs/{job}/latest</code></strong>
+              <span>latest run status</span>
+            </div>
+            <div class="route">
+              <strong><code>GET /jobs/{job}/history</code></strong>
+              <span>recent run summaries</span>
+            </div>
+            <div class="route">
+              <strong><code>GET /prices/history</code></strong>
+              <span>symbol price history</span>
+            </div>
+            <div class="route">
+              <strong><code>GET /health</code></strong>
+              <span>backend health check</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="deploy">
+        <div class="section-title">
+          <h2 id="deploy">Deploy Flow</h2>
+          <span class="pill">push to main or manual dispatch</span>
+        </div>
+
+        <div class="flow compact" aria-label="Deployment pipeline">
+          <div
+            class="step deploy arrow tip"
+            tabindex="0"
+            data-tip="Workflow runs on pushes to main and manual workflow_dispatch."
+          >
+            <strong>GitHub</strong>
+            <span><code>main</code> push</span>
+          </div>
+          <div
+            class="step deploy arrow tip"
+            tabindex="0"
+            data-tip="Builds backend and frontend Docker images."
+          >
+            <strong>Actions</strong>
+            <span><code>ci-cd.yml</code></span>
+          </div>
+          <div
+            class="step deploy arrow tip"
+            tabindex="0"
+            data-tip="Images are tagged as latest and with the short commit SHA."
+          >
+            <strong>ECR</strong>
+            <span>backend + frontend</span>
+          </div>
+          <div
+            class="step deploy arrow tip"
+            tabindex="0"
+            data-tip="AWS SSM tells the EC2 host to pull code/images and restart compose."
+          >
+            <strong>SSM</strong>
+            <span>remote shell</span>
+          </div>
+          <div
+            class="step deploy arrow tip"
+            tabindex="0"
+            data-tip="The host pulls latest repository changes before restarting containers."
+          >
+            <strong>EC2 repo</strong>
+            <span><code>git pull --rebase</code></span>
+          </div>
+          <div
+            class="step deploy tip"
+            tabindex="0"
+            data-tip="Compose runs backend, frontend, and nginx containers."
+          >
+            <strong>Compose up</strong>
+            <span>backend + frontend + nginx</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="cheatsheet">
+        <div class="section-title">
+          <h2 id="cheatsheet">Cheat Sheet</h2>
+          <span class="pill">where to look</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Question</th>
+                <th>Start Here</th>
+                <th>What It Tells You</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>What runs daily?</td>
+                <td><code>scripts/run_valuations.sh</code></td>
+                <td>Entry point for the scheduled valuation job.</td>
+              </tr>
+              <tr>
+                <td>What does the job do?</td>
+                <td><code>backend/core/daily_snapshot.py</code></td>
+                <td>Source loading, pricing, FX, valuation, snapshot writes.</td>
+              </tr>
+              <tr>
+                <td>Where are API routes?</td>
+                <td><code>backend/app/routers/</code></td>
+                <td>Auth, valuation, job, and price endpoints.</td>
+              </tr>
+              <tr>
+                <td>Where are saved results?</td>
+                <td><code>data/{positions,prices,fx,valuations}/dt=...</code></td>
+                <td>CSV and best-effort Parquet snapshots.</td>
+              </tr>
+              <tr>
+                <td>Where is job health?</td>
+                <td><code>data/job_runs/valuations/</code></td>
+                <td>Run logs, latest status, and history JSON.</td>
+              </tr>
+              <tr>
+                <td>How does prod update?</td>
+                <td><code>.github/workflows/ci-cd.yml</code></td>
+                <td>Build, push to ECR, deploy through SSM, restart Compose.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

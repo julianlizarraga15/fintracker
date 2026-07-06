@@ -1,5 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.app.job_trigger import (
+    JobAlreadyRunning,
+    JobStartError,
+    JobTriggerResponse,
+    start_valuation_job,
+)
 from backend.app.job_runs import (
     DEFAULT_HISTORY_LIMIT,
     JobRunNotFound,
@@ -11,6 +17,16 @@ from backend.app.job_runs import (
 from backend.app.security import require_jwt
 
 router = APIRouter()
+
+
+@router.post("/jobs/valuations/run", response_model=JobTriggerResponse, status_code=202)
+def trigger_valuation_job(_: dict = Depends(require_jwt)):
+    try:
+        return start_valuation_job()
+    except JobAlreadyRunning as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except JobStartError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/jobs/{job_name}/latest", response_model=JobRunResponse)

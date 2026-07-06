@@ -124,6 +124,12 @@
         opacity: 0.6;
         cursor: not-allowed;
       }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -237,7 +243,10 @@
       <section class="panel">
         <div class="header">
           <h2>Latest run</h2>
-          <button id="refresh-button" type="button">Refresh</button>
+          <div class="actions">
+            <button id="run-button" type="button">Run now</button>
+            <button id="refresh-button" type="button">Refresh</button>
+          </div>
         </div>
         <div class="grid" style="margin-top: 18px">
           <div class="metric"><span class="label">Status</span><div id="latest-status" class="status" data-status="unknown">Unknown</div></div>
@@ -280,6 +289,7 @@
         username: document.getElementById("username"),
         password: document.getElementById("password"),
         loginButton: document.getElementById("login-button"),
+        runButton: document.getElementById("run-button"),
         refreshButton: document.getElementById("refresh-button"),
         feedback: document.getElementById("feedback"),
         latestStatus: document.getElementById("latest-status"),
@@ -297,6 +307,10 @@
       const HOUR_MS = 60 * 60 * 1000;
       const JOB_STALE_AFTER_HOURS = 36;
       const JOB_STALE_AFTER_MS = JOB_STALE_AFTER_HOURS * HOUR_MS;
+      const JOB_POLL_INTERVAL_MS = 5000;
+      const JOB_POLL_MAX_ATTEMPTS = 24;
+      let jobPollTimer = null;
+      let jobPollAttempts = 0;
 
       function setFeedback(message, tone = "muted") {
         dom.feedback.className = tone;
@@ -342,8 +356,11 @@
         return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[ch]));
       }
 
-      async function api(path) {
-        const response = await fetch(path, { headers: headers() });
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          ...options,
+          headers: { ...headers(), ...(options.headers || {}) },
+        });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(payload.detail || `Request failed with status ${response.status}`);
@@ -459,10 +476,10 @@
           .join("");
       }
 
-      async function loadDashboard() {
+      async function loadDashboard(options = {}) {
         if (!hasToken()) {
           setFeedback("Log in to load job status.", "warning");
-          return;
+          return null;
         }
         dom.refreshButton.disabled = true;
         try {
@@ -474,14 +491,65 @@
           renderHistory(history);
           const latestAgeMs = getRunAgeMs(latest.started_at);
           if (latestAgeMs !== null && latestAgeMs > JOB_STALE_AFTER_MS) {
-            setFeedback(`Latest valuations job is stale. Last run was ${formatAge(latestAgeMs)}.`, "warning");
-          } else {
+            if (!options.quiet) setFeedback(`Latest valuations job is stale. Last run was ${formatAge(latestAgeMs)}.`, "warning");
+          } else if (!options.quiet) {
             setFeedback("Dashboard loaded.", "success");
           }
+          return latest;
         } catch (error) {
-          setFeedback(error.message || "Failed to load dashboard.", "danger");
+          if (!options.quiet) setFeedback(error.message || "Failed to load dashboard.", "danger");
+          if (options.quiet) throw error;
+          return null;
         } finally {
           dom.refreshButton.disabled = false;
+        }
+      }
+
+      function stopJobPolling() {
+        if (jobPollTimer) window.clearTimeout(jobPollTimer);
+        jobPollTimer = null;
+        jobPollAttempts = 0;
+      }
+
+      function scheduleJobPoll(runId) {
+        stopJobPolling();
+        const poll = async () => {
+          jobPollAttempts += 1;
+          try {
+            const latest = await loadDashboard({ quiet: true });
+            if (latest && latest.run_id === runId) {
+              setFeedback(`Valuation job ${runId} finished with status ${latest.status}.`, latest.status === "success" ? "success" : "danger");
+              stopJobPolling();
+              return;
+            }
+            setFeedback(`Valuation job ${runId} is running…`, "muted");
+          } catch (error) {
+            setFeedback(error.message || "Failed to refresh job status.", "danger");
+          }
+          if (jobPollAttempts >= JOB_POLL_MAX_ATTEMPTS) {
+            setFeedback("Valuation job is still running. Refresh again later.", "warning");
+            stopJobPolling();
+            return;
+          }
+          jobPollTimer = window.setTimeout(poll, JOB_POLL_INTERVAL_MS);
+        };
+        poll();
+      }
+
+      async function triggerValuationJob() {
+        if (!hasToken()) {
+          setFeedback("Log in to run the valuation job.", "warning");
+          return;
+        }
+        dom.runButton.disabled = true;
+        try {
+          const started = await api("/api/jobs/valuations/run", { method: "POST" });
+          setFeedback(`Valuation job ${started.run_id} started.`, "success");
+          scheduleJobPoll(started.run_id);
+        } catch (error) {
+          setFeedback(error.message || "Failed to start valuation job.", "danger");
+        } finally {
+          dom.runButton.disabled = false;
         }
       }
 
@@ -490,6 +558,7 @@
         login(dom.username.value.trim(), dom.password.value);
       });
       dom.refreshButton.addEventListener("click", loadDashboard);
+      dom.runButton.addEventListener("click", triggerValuationJob);
     </script>
   </body>
 </html>

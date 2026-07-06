@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Navigate to application root inside the container if not already there
-cd /app
+APP_ROOT="${FINTRACKER_APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+# Navigate to application root if not already there.
+cd "${APP_ROOT}"
 
 # Load environment variables if .env is present (e.g., when running outside Docker)
 if [[ -f .env ]]; then
@@ -12,4 +14,4 @@ if [[ -f .env ]]; then
   set +o allexport
 fi
 
-exec /app/scripts/run_valuations_with_status.sh
+exec "${APP_ROOT}/scripts/run_valuations_with_status.sh"

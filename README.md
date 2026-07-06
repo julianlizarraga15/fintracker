@@ -122,6 +122,8 @@ Systemd units (not checked into the repo) live at:
 
    Reload with `sudo systemctl daemon-reload`, then `sudo systemctl enable --now valuations.timer`. Logs: `journalctl -u valuations.service`.
 
+The authenticated job dashboard can also trigger an ad hoc valuation run with `POST /api/jobs/valuations/run`. The trigger returns immediately, uses the same on-disk job status files as scheduled runs, and rejects overlapping runs.
+
 ## Public Demo Auth + TLS
 - **Configure secrets via env/secret store**: set `DEMO_AUTH_USERNAME`, `DEMO_AUTH_PASSWORD`, `JWT_SECRET`, and optionally override `JWT_EXPIRES_MINUTES` before the backend container boots. Keep these out of git and rotate `JWT_SECRET` if compromised.
 - **Frontend auth flow**: the SPA now shows a login form, calls `/api/auth/login`, keeps the JWT in memory, attaches it to `/api/valuations/latest` fetches, and clears it on any `401` so the user is prompted to log back in.

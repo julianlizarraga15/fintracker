@@ -4,7 +4,10 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from backend.app.job_runs import build_job_run_payload, get_job_run_history, get_latest_job_run, parse_job_run_log
+from backend.app.job_trigger import JobAlreadyRunning, release_job_lock, start_valuation_job
 
 
 OLD_FILE_MTIME = 1
@@ -111,3 +114,51 @@ def test_latest_job_run_uses_newest_run_file_when_latest_json_is_stale(monkeypat
     latest = get_latest_job_run(job_name="valuations")
 
     assert latest.run_id == "2026-06-30_120000"
+
+
+def test_start_valuation_job_creates_lock_and_launches_background_runner(monkeypatch, tmp_path: Path):
+    import backend.app.job_runs as job_runs_module
+    import backend.app.job_trigger as job_trigger_module
+
+    captured = {}
+
+    class FakeProcess:
+        pid = 12345
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(job_runs_module, "JOB_RUNS_ROOT", tmp_path)
+    monkeypatch.setattr(job_trigger_module.subprocess, "Popen", fake_popen)
+
+    response = start_valuation_job()
+    lock_dir = tmp_path / "valuations" / ".running.lock"
+
+    assert response.job == "valuations"
+    assert response.status == "started"
+    assert captured["command"][:3] == [job_trigger_module.sys.executable, "-m", "backend.app.run_valuations_job"]
+    assert captured["kwargs"]["env"]["RUN_STAMP"] == response.run_id
+    assert captured["kwargs"]["env"]["FINTRACKER_SKIP_JOB_LOCK"] == "1"
+    assert (lock_dir / "pid").read_text(encoding="utf-8").strip() == "12345"
+    assert (lock_dir / "run_id").read_text(encoding="utf-8").strip() == response.run_id
+
+    release_job_lock(lock_dir)
+
+
+def test_start_valuation_job_rejects_active_lock(monkeypatch, tmp_path: Path):
+    import backend.app.job_runs as job_runs_module
+
+    runs_dir = tmp_path / "valuations"
+    lock_dir = runs_dir / ".running.lock"
+    lock_dir.mkdir(parents=True)
+    (lock_dir / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
+
+    monkeypatch.setattr(job_runs_module, "JOB_RUNS_ROOT", tmp_path)
+
+    try:
+        with pytest.raises(JobAlreadyRunning):
+            start_valuation_job()
+    finally:
+        release_job_lock(lock_dir)

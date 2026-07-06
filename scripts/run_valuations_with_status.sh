@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd /app
+APP_ROOT="${FINTRACKER_APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+cd "${APP_ROOT}"
 
 if [[ -f .env ]]; then
   set -o allexport
@@ -11,13 +13,35 @@ if [[ -f .env ]]; then
 fi
 
 JOB_NAME="valuations"
-RUN_STAMP="$(date -u +"%Y-%m-%d_%H%M%S")"
+RUN_STAMP="${RUN_STAMP:-$(date -u +"%Y-%m-%d_%H%M%S")}"
 STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 RUNS_ROOT="${JOB_RUNS_LOCAL_DIR:-data/job_runs}"
 RUNS_DIR="${RUNS_ROOT}/${JOB_NAME}"
 LOG_FILE="${RUNS_DIR}/${RUN_STAMP}.log"
+LOCK_DIR="${RUNS_DIR}/.running.lock"
+ALREADY_RUNNING_EXIT_CODE=75
+LOCK_HELD=0
 
 mkdir -p "${RUNS_DIR}"
+
+release_lock() {
+  if [[ "${LOCK_HELD}" == "1" ]]; then
+    rm -f "${LOCK_DIR}/pid" "${LOCK_DIR}/run_id" "${LOCK_DIR}/started_at"
+    rmdir "${LOCK_DIR}" 2>/dev/null || true
+  fi
+}
+
+if [[ "${FINTRACKER_SKIP_JOB_LOCK:-}" != "1" ]]; then
+  if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+    echo "Valuations job is already running."
+    exit "${ALREADY_RUNNING_EXIT_CODE}"
+  fi
+  LOCK_HELD=1
+  trap release_lock EXIT
+  printf "%s\n" "$$" > "${LOCK_DIR}/pid"
+  printf "%s\n" "${RUN_STAMP}" > "${LOCK_DIR}/run_id"
+  printf "%s\n" "${STARTED_AT}" > "${LOCK_DIR}/started_at"
+fi
 
 set +e
 python -m backend.core.daily_snapshot 2>&1 | tee "${LOG_FILE}"
