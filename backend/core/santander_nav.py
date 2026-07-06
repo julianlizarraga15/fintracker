@@ -46,18 +46,9 @@ class FundShareValue(TypedDict):
     current_share_value_date: str
 
 
-def _bootstrap_session(session: requests.Session) -> None:
-    """Hit the landing page so Santander sets anti-bot cookies."""
-    try:
-        session.get(LANDING_URL, timeout=10)
-    except requests.RequestException:
-        pass  # harmless: subsequent JSON request will surface real error
-
-
 def build_session() -> requests.Session:
     session = requests.Session()
     session.headers.update(SESSION_HEADERS)
-    _bootstrap_session(session)
     return session
 
 
@@ -95,4 +86,3 @@ def fetch_share_value(session: requests.Session, fund_id: str) -> FundShareValue
 def fetch_share_values(fund_ids: Iterable[str]) -> List[FundShareValue]:
     session = build_session()
     return [fetch_share_value(session, f) for f in fund_ids]
-

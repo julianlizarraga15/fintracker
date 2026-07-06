@@ -68,7 +68,7 @@ The EC2 instance role needs `ssm:GetParametersByPath` for that path, plus `kms:D
 - Token balances are automatically adjusted for decimals and priced alongside other crypto assets.
 
 ## Fetching Santander Mutual-Fund NAV
-We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA headers, boots a session via the public landing page, and calls `https://www.santander.com.ar/fondosInformacion/funds/<id>/detail` to retrieve `currentShareValue` (`valor de la cuotaparte`) plus its date.
+We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA API headers and calls `https://www.santander.com.ar/fondosInformacion/funds/<id>/detail` directly to retrieve `currentShareValue` (`valor de la cuotaparte`) plus its date.
 
 - **Local run** (after `pip install -r backend/requirements.txt`):
   ```bash
@@ -79,7 +79,7 @@ We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA heade
   ```bash
   docker compose exec backend python /app/scripts/fetch_santander_nav.py 1
   ```
-- The script deliberately warms up a session against the info landing page and sends Santander's required headers (`channel-name`, `x-ibm-client-id`, `sec-fetch-*`, etc.). Plain `curl` without those headers is rejected with “Servicio temporalmente no disponible”, so always run this helper instead of hand-rolling the request.
+- The script sends Santander's required API headers (`channel-name`, `x-ibm-client-id`, `sec-fetch-*`, etc.) without preloading cookies from the info landing page. Plain `curl` without those headers is rejected with “Servicio temporalmente no disponible”, so always run this helper instead of hand-rolling the request.
 
 ### Santander funds inside the daily valuation flow
 
