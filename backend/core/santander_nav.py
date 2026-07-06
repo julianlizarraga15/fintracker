@@ -10,22 +10,6 @@ import requests
 LANDING_URL = "https://www.santander.com.ar/personas/inversiones/informacion-fondos"
 DETAIL_URL = "https://www.santander.com.ar/fondosInformacion/funds/{fund_id}/detail"
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/142.0.0.0 Safari/537.36"
-)
-ACCEPT_LANGUAGE = "es-AR,es;q=0.9,en;q=0.8"
-SEC_CH_UA = '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"'
-
-SESSION_HEADERS = {
-    "user-agent": USER_AGENT,
-    "accept-language": ACCEPT_LANGUAGE,
-    "sec-ch-ua": SEC_CH_UA,
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-}
-
 API_HEADERS = {
     "accept": "application/json, text/plain, */*",
     "origin": "https://www.santander.com.ar",
@@ -38,6 +22,10 @@ API_HEADERS = {
     "sec-fetch-site": "same-origin",
 }
 
+CONNECT_TIMEOUT_SECONDS = 5
+READ_TIMEOUT_SECONDS = 30
+REQUEST_TIMEOUT = (CONNECT_TIMEOUT_SECONDS, READ_TIMEOUT_SECONDS)
+
 
 class FundShareValue(TypedDict):
     fund_id: str
@@ -47,9 +35,7 @@ class FundShareValue(TypedDict):
 
 
 def build_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(SESSION_HEADERS)
-    return session
+    return requests.Session()
 
 
 def _api_headers() -> Dict[str, str]:
@@ -61,9 +47,19 @@ def _api_headers() -> Dict[str, str]:
 def fetch_share_value(session: requests.Session, fund_id: str) -> FundShareValue:
     """Return share value data (including fund name) for the chosen fund."""
     url = DETAIL_URL.format(fund_id=fund_id)
+    headers = _api_headers()
     try:
-        resp = session.get(url, headers=_api_headers(), timeout=10)
+        resp = session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
+    except requests.Timeout as exc:
+        try:
+            resp = requests.get(url, headers=_api_headers(), timeout=REQUEST_TIMEOUT)
+            resp.raise_for_status()
+        except requests.RequestException as retry_exc:
+            raise RuntimeError(
+                f"Failed to fetch fund {fund_id}: session request timed out ({exc}); "
+                f"direct retry failed: {retry_exc}"
+            ) from retry_exc
     except requests.RequestException as exc:
         raise RuntimeError(f"Failed to fetch fund {fund_id}: {exc}") from exc
 
