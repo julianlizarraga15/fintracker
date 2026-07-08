@@ -72,6 +72,71 @@ def test_get_latest_valuation_snapshot_builds_response(tmp_path, monkeypatch):
     assert response.source_file.endswith(".csv")
 
 
+def test_get_latest_valuation_snapshot_builds_source_allocations(tmp_path, monkeypatch):
+    valuations_dir = tmp_path / "valuations"
+    latest_rows = [
+        {
+            "snapshot_dt": "2024-11-15",
+            "computed_ts": "2024-11-15T08:30:00Z",
+            "symbol": "AAPL",
+            "quantity": 3,
+            "value_base": 1500,
+            "status": "ok",
+            "source": "ppi",
+            "market": "us",
+            "asset_type": "stock",
+        },
+        {
+            "snapshot_dt": "2024-11-15",
+            "computed_ts": "2024-11-15T08:30:00Z",
+            "symbol": "MSFT",
+            "quantity": 1,
+            "value_base": 500,
+            "status": "missing_price",
+            "source": "ppi",
+            "market": "us",
+            "asset_type": "stock",
+        },
+        {
+            "snapshot_dt": "2024-11-15",
+            "computed_ts": "2024-11-15T08:30:00Z",
+            "symbol": "BTC",
+            "quantity": 0.1,
+            "value_base": 1000,
+            "status": "ok",
+            "source": "binance",
+            "market": "crypto",
+            "asset_type": "crypto",
+        },
+    ]
+
+    _write_snapshot(valuations_dir, "2024-11-15", "acc-123", latest_rows)
+    monkeypatch.setattr(valuations, "VALUATIONS_DIR", valuations_dir)
+
+    response = valuations.get_latest_valuation_snapshot("acc-123")
+
+    assert [allocation.source for allocation in response.source_allocations] == ["ppi", "binance"]
+    ppi = response.source_allocations[0]
+    assert ppi.total_value_base == pytest.approx(2000)
+    assert ppi.portfolio_share_pct == pytest.approx(66.6667, rel=1e-3)
+    assert ppi.positions == 2
+    assert ppi.ok_positions == 1
+    assert ppi.non_ok_positions == 1
+    assert ppi.markets == ["us"]
+    assert ppi.asset_types == ["stock"]
+    assert ppi.top_symbols == ["AAPL", "MSFT"]
+
+    binance = response.source_allocations[1]
+    assert binance.total_value_base == pytest.approx(1000)
+    assert binance.portfolio_share_pct == pytest.approx(33.3333, rel=1e-3)
+    assert binance.positions == 1
+    assert binance.ok_positions == 1
+    assert binance.non_ok_positions == 0
+    assert binance.markets == ["crypto"]
+    assert binance.asset_types == ["crypto"]
+    assert binance.top_symbols == ["BTC"]
+
+
 def test_get_latest_valuation_snapshot_missing_account(tmp_path, monkeypatch):
     valuations_dir = tmp_path / "valuations"
     (valuations_dir / "dt=2024-11-01").mkdir(parents=True)

@@ -106,6 +106,18 @@ class ValuationTotals(BaseModel):
     base_currency: str = Field(default=BASE_CURRENCY)
 
 
+class SourceAllocation(BaseModel):
+    source: str
+    total_value_base: float
+    portfolio_share_pct: Optional[float] = None
+    positions: int
+    ok_positions: int
+    non_ok_positions: int
+    markets: list[str] = Field(default_factory=list)
+    asset_types: list[str] = Field(default_factory=list)
+    top_symbols: list[str] = Field(default_factory=list)
+
+
 class LatestValuationResponse(BaseModel):
     snapshot_dt: date
     computed_ts: datetime
@@ -113,7 +125,58 @@ class LatestValuationResponse(BaseModel):
     base_currency: str = Field(default=BASE_CURRENCY)
     totals: ValuationTotals
     rows: list[ValuationRow]
+    source_allocations: list[SourceAllocation] = Field(default_factory=list)
     source_file: str
+
+
+def _clean_group_value(value, fallback: str = "unknown") -> str:
+    if value is None or pd.isna(value):
+        return fallback
+    text = str(value).strip()
+    return text or fallback
+
+
+def _unique_sorted(values) -> list[str]:
+    return sorted({_clean_group_value(value, "") for value in values if _clean_group_value(value, "")})
+
+
+def _build_source_allocations(df: pd.DataFrame, total_value_base: Optional[float]) -> list[SourceAllocation]:
+    required_columns = {"value_base", "source", "status", "symbol", "quantity", "asset_type"}
+    if not required_columns.issubset(df.columns):
+        return []
+
+    working = df.copy()
+    working["_source_key"] = working["source"].apply(_clean_group_value)
+    working["_symbol_key"] = working.apply(
+        lambda row: _clean_group_value(row.get("symbol") or row.get("raw_symbol"), ""), axis=1
+    )
+    working["_value_base"] = pd.to_numeric(working["value_base"], errors="coerce").fillna(0.0)
+
+    allocations: list[SourceAllocation] = []
+    for source, source_df in working.groupby("_source_key", dropna=False):
+        symbol_totals = (
+            source_df[source_df["_symbol_key"] != ""]
+            .groupby("_symbol_key")["_value_base"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+        total = safe_float(source_df["_value_base"].sum()) or 0.0
+        ok_positions = int((source_df["status"] == "ok").sum())
+        allocations.append(
+            SourceAllocation(
+                source=source,
+                total_value_base=total,
+                portfolio_share_pct=_compute_portfolio_share(total, total_value_base),
+                positions=int(source_df["_symbol_key"].replace("", pd.NA).nunique()),
+                ok_positions=ok_positions,
+                non_ok_positions=int(len(source_df) - ok_positions),
+                markets=_unique_sorted(source_df["market"]) if "market" in source_df else [],
+                asset_types=_unique_sorted(source_df["asset_type"]),
+                top_symbols=list(symbol_totals.head(5).index),
+            )
+        )
+    allocations.sort(key=lambda allocation: allocation.total_value_base, reverse=True)
+    return allocations
 
 
 def _build_rows(df: pd.DataFrame, total_value_base: Optional[float]) -> list[ValuationRow]:
@@ -169,12 +232,14 @@ def get_latest_valuation_snapshot(account_id: str) -> LatestValuationResponse:
                 total_value_base=safe_float(pd.to_numeric(df["value_base"], errors="coerce").sum()) if "value_base" in df else None,
             )
             rows = _build_rows(df, totals.total_value_base)
+            source_allocations = _build_source_allocations(df, totals.total_value_base)
             return LatestValuationResponse(
                 snapshot_dt=snapshot_dt,
                 computed_ts=computed_ts,
                 account_id=account_id,
                 totals=totals,
                 rows=rows,
+                source_allocations=source_allocations,
                 source_file=str(snapshot_path),
             )
         except SnapshotNotFound as exc:
