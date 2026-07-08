@@ -327,6 +327,51 @@
         line-height: 1;
       }
 
+      .view-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .segmented-control {
+        display: inline-flex;
+        border: 1px solid var(--panel-border);
+        border-radius: 999px;
+        padding: 3px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .segmented-control button {
+        background: transparent;
+        border-radius: 999px;
+        box-shadow: none;
+        color: var(--text-muted);
+        padding: 8px 14px;
+      }
+
+      .segmented-control button[aria-pressed="true"] {
+        background: linear-gradient(120deg, #7ef6de, #72e4ff);
+        color: #05111b;
+      }
+
+      .allocation-bar {
+        width: min(180px, 28vw);
+        min-width: 90px;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .allocation-bar__fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(120deg, #7ef6de, #72e4ff);
+      }
+
       .details-row {
         background: rgba(255, 255, 255, 0.02);
       }
@@ -892,19 +937,26 @@
 
       <section class="panel">
         <header>
-          <h2 style="margin: 0">Positions</h2>
+          <h2 style="margin: 0" id="valuations-title">Positions</h2>
+          <div class="view-toggle" aria-label="Valuation view selector">
+            <span class="label" style="margin: 0">View by</span>
+            <div class="segmented-control">
+              <button type="button" data-view-mode="position" aria-pressed="true">Position</button>
+              <button type="button" data-view-mode="source" aria-pressed="false">Source</button>
+            </div>
+          </div>
           <p class="hint" id="rows-summary">No snapshot loaded yet.</p>
         </header>
         <div class="table-wrapper" role="region" aria-live="polite">
           <table>
-            <thead>
+            <thead id="rows-head">
               <tr>
                 <th>Symbol</th>
                 <th>Trend</th>
                 <th>Source</th>
-                <th>Unit price (USD)</th>
+                <th>Unit price</th>
                 <th>Quantity</th>
-                <th>Value (USD)</th>
+                <th>Value</th>
                 <th>% of portfolio</th>
               </tr>
             </thead>
@@ -962,8 +1014,10 @@
         baseCurrency: document.getElementById("base-currency"),
         positionsCount: document.getElementById("positions-count"),
         okPositions: document.getElementById("ok-positions"),
+        rowsHead: document.getElementById("rows-head"),
         rowsBody: document.getElementById("rows-body"),
         rowsSummary: document.getElementById("rows-summary"),
+        valuationsTitle: document.getElementById("valuations-title"),
         cryptoSummary: document.getElementById("crypto-summary"),
         cryptoFeedback: document.getElementById("crypto-feedback"),
         cryptoBody: document.getElementById("crypto-body"),
@@ -1018,6 +1072,8 @@
       const priceHistoryCache = new Map();
       const chartState = { currencyMode: "base", seriesMode: "raw", symbol: null, history: null };
       let lastBaseCurrency = "";
+      let latestValuationPayload = null;
+      let valuationViewMode = "position";
       let manualCryptoHoldings = [];
 
       const authState = {
@@ -1106,6 +1162,7 @@
         clearStoredAuth();
         priceHistoryCache.clear();
         lastBaseCurrency = "";
+        latestValuationPayload = null;
         resetManualCryptoView();
         if (message) {
           setLoginFeedback(message, "error");
@@ -1211,6 +1268,62 @@
           minimumFractionDigits: fractionDigits,
           maximumFractionDigits: fractionDigits,
         })}%`;
+      }
+
+      function sourceDisplayName(source) {
+        const raw = (source || "").toString().trim();
+        if (!raw) return "Unknown";
+        const names = {
+          ppi: "PPI",
+          iol: "IOL",
+          binance: "Binance",
+          exodus: "Exodus",
+          metamask: "MetaMask",
+          santander: "Santander",
+        };
+        return names[raw.toLowerCase()] || raw;
+      }
+
+      function sourceKey(source) {
+        const raw = (source || "").toString().trim();
+        return raw || "unknown";
+      }
+
+      function valueFromRow(row) {
+        if (row.value_base !== null && row.value_base !== undefined) return row.value_base;
+        if (row.unit_price_base !== null && row.unit_price_base !== undefined && row.quantity !== null && row.quantity !== undefined) {
+          return row.unit_price_base * row.quantity;
+        }
+        return null;
+      }
+
+      function setValuationsHeader(mode, baseCurrency) {
+        const currencyLabel = baseCurrency || "base";
+        dom.valuationsTitle.textContent = mode === "source" ? "Sources" : "Positions";
+        dom.rowsHead.innerHTML =
+          mode === "source"
+            ? `
+              <tr>
+                <th>Source</th>
+                <th>Total value (${currencyLabel})</th>
+                <th>% of portfolio</th>
+                <th>Positions</th>
+                <th>OK / Missing</th>
+                <th>Markets</th>
+                <th>Allocation</th>
+              </tr>
+            `
+            : `
+              <tr>
+                <th>Symbol</th>
+                <th>Trend</th>
+                <th>Source</th>
+                <th>Unit price (${currencyLabel})</th>
+                <th>Quantity</th>
+                <th>Value (${currencyLabel})</th>
+                <th>% of portfolio</th>
+              </tr>
+            `;
       }
 
       function renderSparklinePlaceholder(container, text, muted = false) {
@@ -1580,6 +1693,7 @@
       }
 
       function renderRows(rows, baseCurrency, totalPortfolioValue) {
+        setValuationsHeader("position", baseCurrency);
         if (!rows || !rows.length) {
           dom.rowsBody.innerHTML =
             `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">No positions in this snapshot.</td></tr>`;
@@ -1625,7 +1739,7 @@
           const toggleId = `details-${index}`;
           const hasDetails = group.rows.length > 1;
           const summarySources = Array.from(
-            new Set(group.rows.map((r) => r.source || r.market || "Unknown"))
+            new Set(group.rows.map((r) => sourceDisplayName(r.source || r.market)))
           );
 
           const tr = document.createElement("tr");
@@ -1669,9 +1783,9 @@
             <thead>
               <tr>
                 <th>Source</th>
-                <th>Unit price (USD)</th>
+                <th>Unit price</th>
                 <th>Quantity</th>
-                <th>Value (USD)</th>
+                <th>Value</th>
                 <th>% of portfolio</th>
                 <th>Status</th>
               </tr>
@@ -1692,7 +1806,7 @@
                       : null;
                   return `
                     <tr>
-                      <td data-label="Source">${row.source ?? row.market ?? "—"}</td>
+                      <td data-label="Source">${sourceDisplayName(row.source || row.market)}</td>
                       <td class="mono" data-label="Unit price">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
                       <td class="mono" data-label="Quantity">${formatNumber(quantity)}</td>
                       <td class="mono" data-label="Value">${formatCurrency(valueUsd, baseCurrency)}</td>
@@ -1718,6 +1832,130 @@
         dom.rowsBody.replaceChildren(fragment);
         const summaryCurrency = baseCurrency || "base";
         dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by ${summaryCurrency} value).`;
+      }
+
+      function renderSourceRows(payload, baseCurrency) {
+        setValuationsHeader("source", baseCurrency);
+        const allocations = payload?.source_allocations || [];
+        const rows = payload?.rows || [];
+        if (!allocations.length) {
+          dom.rowsBody.innerHTML =
+            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">No source allocations in this snapshot.</td></tr>`;
+          dom.rowsSummary.textContent = "0 sources.";
+          return;
+        }
+
+        const rowsBySource = new Map();
+        rows.forEach((row) => {
+          const key = sourceKey(row.source);
+          if (!rowsBySource.has(key)) rowsBySource.set(key, []);
+          rowsBySource.get(key).push(row);
+        });
+
+        const fragment = document.createDocumentFragment();
+        allocations.forEach((allocation, index) => {
+          const key = sourceKey(allocation.source);
+          const sourceRows = rowsBySource.get(key) || [];
+          const toggleId = `source-details-${index}`;
+          const hasDetails = sourceRows.length > 0;
+          const width = Math.max(0, Math.min(PERCENT_SCALE, Number(allocation.portfolio_share_pct) || 0));
+          const markets = Array.isArray(allocation.markets) && allocation.markets.length ? allocation.markets.join(", ") : "—";
+          const topSymbols = Array.isArray(allocation.top_symbols) && allocation.top_symbols.length
+            ? allocation.top_symbols.join(", ")
+            : "No symbols";
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td data-label="Source">
+              <div>${sourceDisplayName(allocation.source)}</div>
+              <div class="hint mono">${allocation.source || "unknown"}</div>
+              <div class="hint">${topSymbols}</div>
+              ${
+                hasDetails
+                  ? `<button class="toggle-button" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle source details">></button>`
+                  : ""
+              }
+            </td>
+            <td class="mono" data-label="Total value">${formatCurrency(allocation.total_value_base, baseCurrency)}</td>
+            <td class="mono" data-label="% of portfolio">${formatPercent(allocation.portfolio_share_pct)}</td>
+            <td class="mono" data-label="Positions">${formatNumber(allocation.positions, { maximumFractionDigits: 0 })}</td>
+            <td data-label="OK / Missing">
+              <span class="badge" data-tone="ok">${allocation.ok_positions ?? 0} ok</span>
+              <span class="badge" data-tone="${allocation.non_ok_positions ? "warning" : "ok"}">${allocation.non_ok_positions ?? 0} missing</span>
+            </td>
+            <td data-label="Markets">${markets}</td>
+            <td data-label="Allocation">
+              <div class="allocation-bar" aria-label="${formatPercent(allocation.portfolio_share_pct)} allocation">
+                <span class="allocation-bar__fill" style="width: ${width}%"></span>
+              </div>
+            </td>
+          `;
+          fragment.appendChild(tr);
+
+          if (!hasDetails) return;
+          const detailRow = document.createElement("tr");
+          detailRow.id = toggleId;
+          detailRow.className = "details-row is-hidden";
+          const detailCell = document.createElement("td");
+          detailCell.colSpan = TABLE_COLUMN_COUNT;
+          const innerTable = document.createElement("table");
+          innerTable.innerHTML = `
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Asset type</th>
+                <th>Quantity</th>
+                <th>Value (${baseCurrency || "base"})</th>
+                <th>% of portfolio</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sourceRows
+                .slice()
+                .sort((a, b) => (valueFromRow(b) || 0) - (valueFromRow(a) || 0))
+                .map((row) => {
+                  const value = valueFromRow(row);
+                  return `
+                    <tr>
+                      <td class="mono" data-label="Symbol">${row.symbol || "—"}</td>
+                      <td data-label="Asset type">${row.asset_type || "—"}</td>
+                      <td class="mono" data-label="Quantity">${formatNumber(row.quantity)}</td>
+                      <td class="mono" data-label="Value">${formatCurrency(value, baseCurrency)}</td>
+                      <td class="mono" data-label="% of portfolio">${formatPercent(row.portfolio_share_pct)}</td>
+                      <td data-label="Status">
+                        ${
+                          row.status
+                            ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>`
+                            : ""
+                        }
+                      </td>
+                    </tr>
+                  `;
+                })
+                .join("")}
+            </tbody>
+          `;
+          detailCell.appendChild(innerTable);
+          detailRow.appendChild(detailCell);
+          fragment.appendChild(detailRow);
+        });
+        dom.rowsBody.replaceChildren(fragment);
+        dom.rowsSummary.textContent = `${allocations.length} sources (sorted by ${baseCurrency || "base"} value).`;
+      }
+
+      function renderValuationPayload() {
+        if (!latestValuationPayload) return;
+        if (valuationViewMode === "source") {
+          renderSourceRows(latestValuationPayload, lastBaseCurrency);
+          return;
+        }
+        renderRows(
+          latestValuationPayload.rows,
+          lastBaseCurrency,
+          latestValuationPayload.totals?.total_value_base
+        );
+        renderSparklines(lastBaseCurrency);
       }
 
       function clearHistoryModalRawTable() {
@@ -2182,8 +2420,8 @@
           dom.positionsCount.textContent = payload.totals?.positions ?? "—";
           dom.okPositions.textContent = `OK positions ${payload.totals?.ok_positions ?? "—"}`;
 
-          renderRows(payload.rows, lastBaseCurrency, payload.totals?.total_value_base);
-          renderSparklines(lastBaseCurrency);
+          latestValuationPayload = payload;
+          renderValuationPayload();
           setStatus("Snapshot ready", "ready");
           setFeedback(`Snapshot loaded for account ${payload.account_id}.`, "success");
           localStorage.setItem(STORAGE_KEY, accountId.trim());
@@ -2195,6 +2433,7 @@
           }
           setStatus("Error", "error");
           lastBaseCurrency = "";
+          latestValuationPayload = null;
           dom.rowsBody.innerHTML =
             `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>`;
           dom.rowsSummary.textContent = "Request failed.";
@@ -2223,6 +2462,19 @@
           return;
         }
         authenticate(username, password);
+      });
+
+
+      document.querySelectorAll("[data-view-mode]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const mode = button.dataset.viewMode === "source" ? "source" : "position";
+          if (mode === valuationViewMode) return;
+          valuationViewMode = mode;
+          document.querySelectorAll("[data-view-mode]").forEach((toggle) => {
+            toggle.setAttribute("aria-pressed", String(toggle.dataset.viewMode === valuationViewMode));
+          });
+          renderValuationPayload();
+        });
       });
 
       dom.cryptoLoadButton.addEventListener("click", loadManualCryptoHoldings);
