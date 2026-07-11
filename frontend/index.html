@@ -733,6 +733,34 @@
           font-weight: 700;
         }
 
+        .table-wrapper > table > tbody > tr > td.source-cell {
+          display: block;
+          text-align: left;
+        }
+
+        .table-wrapper > table > tbody > tr > td.source-cell::before {
+          display: block;
+          margin-bottom: 8px;
+        }
+
+        .source-cell__content {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 8px 12px;
+          width: 100%;
+        }
+
+        .source-cell__symbols {
+          grid-column: 1 / -1;
+          overflow-wrap: anywhere;
+          white-space: normal;
+        }
+
+        .source-cell__toggle {
+          align-self: start;
+          justify-self: end;
+        }
+
         .table-wrapper > table > tbody > tr > td:has(.sparkline) {
           align-items: center;
         }
@@ -1866,15 +1894,19 @@
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td data-label="Source">
-              <div>${sourceDisplayName(allocation.source)}</div>
-              <div class="hint mono">${allocation.source || "unknown"}</div>
-              <div class="hint">${topSymbols}</div>
-              ${
-                hasDetails
-                  ? `<button class="toggle-button" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle source details">></button>`
-                  : ""
-              }
+            <td class="source-cell" data-label="Source">
+              <div class="source-cell__content">
+                <div class="source-cell__name">
+                  <div>${sourceDisplayName(allocation.source)}</div>
+                  <div class="hint mono">${allocation.source || "unknown"}</div>
+                </div>
+                <div class="hint source-cell__symbols">${topSymbols}</div>
+                ${
+                  hasDetails
+                    ? `<button class="toggle-button source-cell__toggle" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle source details">></button>`
+                    : ""
+                }
+              </div>
             </td>
             <td class="mono" data-label="Total value">${formatCurrency(allocation.total_value_base, baseCurrency)}</td>
             <td class="mono" data-label="% of portfolio">${formatPercent(allocation.portfolio_share_pct)}</td>
