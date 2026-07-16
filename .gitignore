@@ -213,3 +213,7 @@ data/
 # TLS assets deployed to nginx container
 tls/
 .aider*
+
+# Node / Playwright
+node_modules/
+artifacts/visual-check/
