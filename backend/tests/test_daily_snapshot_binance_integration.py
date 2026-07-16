@@ -9,6 +9,38 @@ from backend.core import binance_transform, daily_snapshot, iol_transform, ppi_t
 from backend.valuation.models import FXRate, Price as PriceModel
 
 
+def test_btc_wallet_positions_use_their_own_enable_flag(monkeypatch):
+    monkeypatch.setattr(
+        daily_snapshot,
+        "get_all_btc_balances",
+        lambda addresses, source: [
+            {
+                "symbol": "BTC",
+                "quantity": 0.25,
+                "source": source,
+                "market": "crypto",
+            }
+        ],
+    )
+
+    positions = daily_snapshot._load_btc_wallet_positions(
+        enabled=True,
+        addresses_csv="bc1qexample",
+        source="metamask",
+    )
+
+    assert positions.iloc[0]["symbol"] == "BTC"
+    assert positions.iloc[0]["source"] == "metamask"
+    assert positions.iloc[0]["quantity"] == 0.25
+
+    disabled_positions = daily_snapshot._load_btc_wallet_positions(
+        enabled=False,
+        addresses_csv="bc1qexample",
+        source="metamask",
+    )
+    assert disabled_positions.empty
+
+
 def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
     dt_str = "2024-01-01"
     saved = {}

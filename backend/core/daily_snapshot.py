@@ -216,6 +216,25 @@ def _crypto_positions_df(holdings: list[CryptoHolding]) -> pd.DataFrame:
     )
 
 
+def _load_btc_wallet_positions(
+    *, enabled: bool, addresses_csv: str, source: str
+) -> pd.DataFrame:
+    if not enabled:
+        return pd.DataFrame(columns=POSITION_COLUMNS)
+
+    addresses = [a.strip() for a in addresses_csv.split(",") if a.strip()]
+    if not addresses:
+        print(f"{source.capitalize()} BTC enabled but no addresses are configured.")
+        return pd.DataFrame(columns=POSITION_COLUMNS)
+
+    balances = get_all_btc_balances(addresses, source=source)
+    return (
+        ethereum_balances_to_df(balances, position_columns=POSITION_COLUMNS)
+        if balances
+        else pd.DataFrame(columns=POSITION_COLUMNS)
+    )
+
+
 def _merge_positions_df(df: pd.DataFrame, incoming_df: pd.DataFrame) -> pd.DataFrame:
     if incoming_df.empty:
         return df
@@ -347,43 +366,32 @@ def main():
 
         # Exodus BTC
         try:
-            btc_addresses = [
-                a.strip() for a in EXODUS_BTC_ADDRESSES.split(",") if a.strip()
-            ]
-            if btc_addresses:
-                btc_balances = get_all_btc_balances(btc_addresses, source="exodus")
-                if btc_balances:
-                    # Reuse ethereum_balances_to_df for simplicity as it's just a mapper
-                    # but we'll manually fix the display name if needed or just let it be
-                    btc_df = ethereum_balances_to_df(
-                        btc_balances, position_columns=POSITION_COLUMNS
-                    )
-                    if not btc_df.empty:
-                        df = _merge_positions_df(df, btc_df)
-                        exodus_symbols.update(btc_df["symbol"])
-                        print(f"Loaded {len(btc_balances)} Exodus Bitcoin assets.")
+            btc_df = _load_btc_wallet_positions(
+                enabled=True,
+                addresses_csv=EXODUS_BTC_ADDRESSES,
+                source="exodus",
+            )
+            if not btc_df.empty:
+                df = _merge_positions_df(df, btc_df)
+                exodus_symbols.update(btc_df["symbol"])
+                print(f"Loaded {len(btc_df)} Exodus Bitcoin assets.")
         except Exception as e:
             print(f"Error fetching Exodus Bitcoin balances: {e}")
 
-        # MetaMask BTC
-        try:
-            btc_addresses = [
-                a.strip() for a in METAMASK_BTC_ADDRESSES.split(",") if a.strip()
-            ]
-            if btc_addresses:
-                btc_balances = get_all_btc_balances(btc_addresses, source="metamask")
-                if btc_balances:
-                    btc_df = ethereum_balances_to_df(
-                        btc_balances, position_columns=POSITION_COLUMNS
-                    )
-                    if not btc_df.empty:
-                        df = _merge_positions_df(df, btc_df)
-                        # We don't have a separate metamask_symbols set yet, but we can add it if needed
-                        # For now, following the pattern of updating exodus_symbols
-                        exodus_symbols.update(btc_df["symbol"])
-                        print(f"Loaded {len(btc_balances)} MetaMask Bitcoin assets.")
-        except Exception as e:
-            print(f"Error fetching MetaMask Bitcoin balances: {e}")
+    # Native BTC is on the Bitcoin network, so it needs a Bitcoin address and
+    # a separate source toggle from the Ethereum/MetaMask wallet scan.
+    try:
+        btc_df = _load_btc_wallet_positions(
+            enabled=ENABLE_METAMASK_BTC,
+            addresses_csv=METAMASK_BTC_ADDRESSES,
+            source="metamask",
+        )
+        if not btc_df.empty:
+            df = _merge_positions_df(df, btc_df)
+            exodus_symbols.update(btc_df["symbol"])
+            print(f"Loaded {len(btc_df)} MetaMask Bitcoin assets.")
+    except Exception as e:
+        print(f"Error fetching MetaMask Bitcoin balances: {e}")
 
     if df.empty:
         print("No positions found or unexpected API format.")
