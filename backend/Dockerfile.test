@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /app/backend
+
+ENV PYTHONPATH=/app
+ENV PYTHON_DOTENV_DISABLED=1
+ENV ACCOUNT_EMAIL=pytest@example.invalid
+
+CMD ["python", "-m", "pytest", "-p", "no:cacheprovider", "backend/tests"]

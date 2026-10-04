@@ -118,11 +118,13 @@ During the snapshot run we:
 Edit `quantity` whenever you buy/sell cuotapartes and the next systemd run (or a manual `docker exec ... run_valuations.sh`) will pull the latest NAV automatically.
 
 ## Testing
-Backend tests live under `backend/tests/` (e.g., `test_valuations.py` verifies snapshot loading plus error handling). Run them with:
+Backend tests live under `backend/tests/`. Run the suite in Docker so local runs use the same runtime as the verified test environment:
+
 ```bash
-pip install -r backend/requirements.txt
-scripts/run_tests.sh
+scripts/run_tests_docker.sh
 ```
+
+This builds a dedicated test image from `backend/` and excludes the repository `.env` file. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
 
 Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 
