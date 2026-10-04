@@ -49,6 +49,16 @@ The EC2 instance role needs `ssm:GetParametersByPath` for that path, plus `kms:D
    ```
    The script ensures `.env` variables are loaded and is what automation invokes.
 
+## Inspecting Saved IOL Instrument Types
+
+From the project directory on EC2, read the latest saved IOL positions using:
+
+```bash
+./scripts/inspect_iol_types.sh
+```
+
+This prints the CSV path, symbols, and instrument labels without contacting IOL or changing files. Locally, use `python3 scripts/inspect_iol_types.py`; pass `--root <snapshot-storage-directory>` to inspect another storage location.
+
 ## Binance Spot Balances
 - Enable with `.env`: set `ENABLE_BINANCE=1`, `BINANCE_API_KEY`, `BINANCE_API_SECRET` (optionally override `BINANCE_BASE_URL` or `BINANCE_RECV_WINDOW_MS`).
 - Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
