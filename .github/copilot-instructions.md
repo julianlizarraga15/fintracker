@@ -20,7 +20,9 @@
 - Use **pytest** for testing.  
   - Test files: `test_*.py`  
   - Test functions: `test_<behavior>()`  
-  - Tests should be small and focused (one behavior per test)  
+  - Prefer integration and end-to-end tests for observable behavior, realistic failure paths, and inspectable artifacts. Identify failure modes before isolating a component.
+  - Add tests for meaningful coverage gaps; avoid tests that duplicate implementation logic or test their own mocks. Extend existing tests and combine redundant cases when clear.
+  - Tests should be focused on behavior
   - Use the **Arrange → Act → Assert** pattern  
   - Mock as little as possible — only external dependencies (network, DB, file system, randomness)
 

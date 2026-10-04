@@ -11,6 +11,11 @@
 - Comments should explain context, trade-offs, and rationale, but keep them minimal. Don't add unnecessary comments.
 
 # Testing & TDD
+- Prefer integration and end-to-end tests that verify observable behavior. For complex features, cover realistic scenarios and failure paths, with reproducible, inspectable artifacts.
+- Avoid tests that duplicate implementation logic, test their own mocks, or fail merely because implementation details changed.
+- Add tests only to close meaningful behavior coverage gaps, including for bug fixes.
+- Extend existing tests and combine redundant cases when it preserves clarity.
+- Before testing a component in isolation, identify its failure modes and design tests around them.
 - For backend financial logic, parsers, transforms, auth behavior, job state, and bug fixes, prefer TDD: add or update a focused failing pytest first, then implement the smallest change needed to pass it.
 - Run `scripts/run_tests.sh` before finishing backend behavior changes when practical.
 - Don’t force strict TDD for exploratory work, live API scripts, deployment plumbing, or visual frontend polish; use targeted tests where they add real confidence.

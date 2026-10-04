@@ -110,10 +110,11 @@ Edit `quantity` whenever you buy/sell cuotapartes and the next systemd run (or a
 ## Testing
 Backend tests live under `backend/tests/` (e.g., `test_valuations.py` verifies snapshot loading plus error handling). Run them with:
 ```bash
-cd backend
-pip install -r requirements.txt
-pytest
+pip install -r backend/requirements.txt
+scripts/run_tests.sh
 ```
+
+Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 
 ## Scheduled Valuations on EC2
 Systemd units (not checked into the repo) live at:

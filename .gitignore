@@ -217,3 +217,4 @@ tls/
 # Node / Playwright
 node_modules/
 artifacts/visual-check/
+artifacts/e2e/

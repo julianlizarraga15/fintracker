@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt
+      - run: scripts/run_tests.sh
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-failure-artifacts
+          path: artifacts/e2e/
+          if-no-files-found: ignore

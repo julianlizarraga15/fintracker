@@ -5,11 +5,13 @@
   "description": "Personal finance tracker frontend visual checks.",
   "type": "commonjs",
   "scripts": {
+    "test:e2e": "playwright test",
     "playwright:install": "npx playwright install --with-deps chromium",
     "visual:check": "node scripts/visual_check.js",
     "visual:check:local": "APP_URL=http://localhost:8080 npm run visual:check"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "playwright": "^1.61.1"
   }
 }
