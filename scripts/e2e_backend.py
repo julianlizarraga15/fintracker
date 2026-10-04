@@ -34,20 +34,38 @@ snapshot_dir.mkdir(parents=True)
 with (snapshot_dir / "valuations_2026-09-30.csv").open("w", newline="", encoding="utf-8") as handle:
     writer = csv.DictWriter(
         handle,
-        fieldnames=["snapshot_dt", "computed_ts", "symbol", "quantity", "value_base", "status", "source"],
+        fieldnames=["snapshot_dt", "computed_ts", "symbol", "quantity", "unit_price_base", "value_base", "status", "source", "asset_type", "market"],
     )
     writer.writeheader()
-    writer.writerow(
-        {
-            "snapshot_dt": "2026-09-30",
-            "computed_ts": "2026-09-30T12:00:00Z",
-            "symbol": "BTC",
-            "quantity": 0.5,
-            "value_base": 30000,
-            "status": "ok",
-            "source": "binance",
-        }
-    )
+    for row in [
+        {"symbol": "BTC", "quantity": 0.225, "unit_price_base": 80000, "value_base": 18000, "status": "ok", "source": "binance", "asset_type": "crypto", "market": "crypto"},
+        {"symbol": "BTC", "quantity": 0.05, "unit_price_base": "", "value_base": "", "status": "missing_price", "source": "binance", "asset_type": "crypto", "market": "crypto"},
+        {"symbol": "BTC", "quantity": 0.1, "unit_price_base": 80000, "value_base": 8000, "status": "ok", "source": "exodus", "asset_type": "crypto", "market": "crypto"},
+        {"symbol": "GGAL", "quantity": 0.5, "unit_price_base": 8000, "value_base": 4000, "status": "ok", "source": "iol", "asset_type": "cedear", "market": "equity"},
+        {"symbol": "ZERO", "quantity": 12.75, "unit_price_base": 0, "value_base": 0, "status": "ok", "source": "iol", "asset_type": "other", "market": "equity"},
+        {"symbol": "UNPRICED", "quantity": 2.5, "unit_price_base": "", "value_base": "", "status": "missing_price", "source": "unknown", "asset_type": "", "market": ""},
+    ]:
+        writer.writerow({"snapshot_dt": "2026-09-30", "computed_ts": "2026-09-30T12:00:00Z", **row})
+
+other_account = "other-account"
+other_dir = storage / "valuations" / "dt=2026-09-30" / f"account={other_account}"
+other_dir.mkdir(parents=True)
+with (other_dir / "valuations_2026-09-30.csv").open("w", newline="", encoding="utf-8") as handle:
+    writer = csv.DictWriter(handle, fieldnames=["snapshot_dt", "computed_ts", "symbol", "quantity", "value_base", "status", "source", "asset_type"])
+    writer.writeheader()
+    writer.writerow({"snapshot_dt": "2026-09-30", "computed_ts": "2026-09-30T12:00:00Z", "symbol": "ALT", "quantity": 1, "value_base": 5000, "status": "ok", "source": "ppi", "asset_type": "fci"})
+
+manual_file = storage / "manual" / "crypto.json"
+manual_file.parent.mkdir(parents=True, exist_ok=True)
+manual_file.write_text(json.dumps([{"symbol": "XRP", "quantity": 12.5, "source": "manual", "currency": "USD", "market": "crypto", "account_id": other_account}]), encoding="utf-8")
+
+price_dir = storage / "prices" / "dt=2026-10-01"
+price_dir.mkdir(parents=True)
+with (price_dir / "prices_2026-10-01.csv").open("w", newline="", encoding="utf-8") as handle:
+    writer = csv.DictWriter(handle, fieldnames=["asof_dt", "symbol", "price", "currency", "source", "venue", "quality_score"])
+    writer.writeheader()
+    writer.writerow({"asof_dt": "2026-10-01", "symbol": "BTC", "price": 80500, "currency": "USD", "source": "e2e", "venue": "fixture", "quality_score": 100})
+    writer.writerow({"asof_dt": "2026-10-02", "symbol": "BTC", "price": 81000, "currency": "USD", "source": "e2e", "venue": "fixture", "quality_score": 100})
 
 run_id = "2026-09-30_120000"
 started_at = "2026-09-30T12:00:00Z"

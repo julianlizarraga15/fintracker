@@ -6,997 +6,280 @@
     <title>Fintracker | Valuations</title>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background-color: #0f1117;
-        color: #f4f6fb;
-        --panel-bg: rgba(255, 255, 255, 0.04);
-        --panel-border: rgba(255, 255, 255, 0.08);
-        --text-muted: rgba(244, 246, 251, 0.65);
-        --accent: #72e4ff;
-        --danger: #ff6b6b;
-        --success: #6bffa8;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: radial-gradient(circle at 20% -10%, rgba(114, 228, 255, 0.2), transparent 45%),
-          radial-gradient(circle at 80% 0%, rgba(107, 255, 168, 0.15), transparent 35%),
-          #05060a;
-      }
-
-      .app {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 40px 24px 80px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-
-      .panel {
-        background: var(--panel-bg);
-        border: 1px solid var(--panel-border);
-        border-radius: 20px;
-        padding: 24px;
-        backdrop-filter: blur(20px);
-        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
-      }
-
-      .app__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-      }
-
-      .app-links {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .app-links a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-
-      .app-links a:hover {
-        text-decoration: underline;
-      }
-
-      h1 {
-        margin: 0;
-        font-size: 2rem;
-      }
-
-      .subtitle {
-        color: var(--text-muted);
-        margin-top: 6px;
-      }
-
-      .status-chip {
-        border-radius: 999px;
-        padding: 8px 16px;
-        font-size: 0.9rem;
-        border: 1px solid var(--panel-border);
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .status-chip[data-state="loading"] {
-        border-color: var(--accent);
-        color: var(--accent);
-      }
-
-      .status-chip[data-state="error"] {
-        border-color: var(--danger);
-        color: var(--danger);
-      }
-
-      .status-chip[data-state="ready"] {
-        border-color: var(--success);
-        color: var(--success);
-      }
-
-      form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      label {
-        font-weight: 600;
-      }
-
-      .control {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-
-      input[type="text"],
-      input[type="password"],
-      input[type="number"] {
-        flex: 1;
-        min-width: 200px;
-        border-radius: 14px;
-        border: 1px solid var(--panel-border);
-        padding: 14px 16px;
-        font-size: 1rem;
-        background: rgba(0, 0, 0, 0.25);
-        color: inherit;
-      }
-
-      input[type="text"]:focus-visible,
-      input[type="password"]:focus-visible,
-      input[type="number"]:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-
-      button {
-        border: none;
-        border-radius: 14px;
-        padding: 14px 22px;
-        font-size: 1rem;
-        background: linear-gradient(120deg, #7ef6de, #72e4ff);
-        color: #05111b;
-        font-weight: 600;
-        cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-        box-shadow: 0 15px 25px rgba(114, 228, 255, 0.3);
-      }
-
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        box-shadow: none;
-      }
-
-      button:not(:disabled):hover {
-        transform: translateY(-1px);
-      }
-
-      .panel-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 16px;
-        margin-bottom: 16px;
-      }
-
-      .panel-actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-
-      .secondary-button,
-      .danger-button {
-        background: none;
-        border: 1px solid var(--panel-border);
-        color: var(--accent);
-        box-shadow: none;
-      }
-
-      .danger-button {
-        color: var(--danger);
-      }
-
-      .crypto-table input {
-        min-width: 110px;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 10px 12px;
-        font-size: 0.95rem;
-      }
-
-      .crypto-table input[data-field="quantity"] {
-        min-width: 140px;
-      }
-
-      .crypto-table th:last-child,
-      .crypto-table td:last-child {
-        width: 1%;
-        white-space: nowrap;
-      }
-
-      .hint {
-        margin: 0;
-        font-size: 0.9rem;
-        color: var(--text-muted);
-      }
-
-      .message {
-        margin-top: 8px;
-        font-size: 0.95rem;
-      }
-
-      .message[data-tone="error"] {
-        color: var(--danger);
-      }
-
-      .auth-grid {
-        display: grid;
-        gap: 12px;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      }
-
-      .login-status {
-        font-size: 0.9rem;
-        color: var(--text-muted);
-      }
-
-      .message[data-tone="success"] {
-        color: var(--success);
-      }
-
-      .meta-grid {
-        margin-top: 20px;
-        display: grid;
-        gap: 16px;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      }
-
-      .label {
-        display: block;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-muted);
-        margin-bottom: 6px;
-      }
-
-      .value-large {
-        font-size: 1.6rem;
-        font-weight: 600;
-      }
-
-      .totals {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 18px;
-        margin-top: 20px;
-      }
-
-      .table-wrapper {
-        margin-top: 20px;
-        border-radius: 16px;
-        border: 1px solid var(--panel-border);
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.95rem;
-      }
-
-      thead {
-        background: rgba(255, 255, 255, 0.05);
-      }
-
-      th,
-      td {
-        padding: 14px 16px;
-        text-align: left;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      }
-
-      tbody tr:hover {
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      .mono {
-        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-      }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 4px 10px;
-        border: 1px solid var(--panel-border);
-        font-size: 0.8rem;
-        color: var(--text-muted);
-      }
-
-      .badge[data-tone="ok"] {
-        color: var(--success);
-        border-color: rgba(107, 255, 168, 0.5);
-      }
-
-      .badge[data-tone="warning"] {
-        color: #ffd66b;
-        border-color: rgba(255, 214, 107, 0.5);
-      }
-
-      .toggle-button {
-        background: none;
-        border: 1px solid var(--panel-border);
-        color: var(--accent);
-        padding: 4px 8px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 0.85rem;
-        line-height: 1;
-      }
-
-      .view-toggle {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-top: 14px;
-      }
-
-      .segmented-control {
-        display: inline-flex;
-        border: 1px solid var(--panel-border);
-        border-radius: 999px;
-        padding: 3px;
-        background: rgba(255, 255, 255, 0.04);
-      }
-
-      .segmented-control button {
-        background: transparent;
-        border-radius: 999px;
-        box-shadow: none;
-        color: var(--text-muted);
-        padding: 8px 14px;
-      }
-
-      .segmented-control button[aria-pressed="true"] {
-        background: linear-gradient(120deg, #7ef6de, #72e4ff);
-        color: #05111b;
-      }
-
-      .allocation-bar {
-        width: min(180px, 28vw);
-        min-width: 90px;
-        height: 8px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        overflow: hidden;
-      }
-
-      .allocation-bar__fill {
-        display: block;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(120deg, #7ef6de, #72e4ff);
-      }
-
-      .details-row {
-        background: rgba(255, 255, 255, 0.02);
-      }
-
-      .details-row table {
-        margin-top: 8px;
-        font-size: 0.9rem;
-      }
-
-      .details-row td {
-        border-bottom: none;
-      }
-
-      .is-hidden {
-        display: none;
-      }
-
-      .empty-state {
-        text-align: center;
-        padding: 40px;
-        color: var(--text-muted);
-      }
-
-      .sparkline {
-        width: 120px;
-        height: 36px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-muted);
-        gap: 4px;
-      }
-
-      .sparkline svg {
-        width: 100%;
-        height: 100%;
-      }
-
-      .sparkline__line {
-        fill: none;
-        stroke: var(--accent);
-        stroke-width: 2;
-      }
-
-      .sparkline__area {
-        fill: rgba(114, 228, 255, 0.22);
-        stroke: none;
-      }
-
-      .sparkline__placeholder {
-        font-size: 0.85rem;
-        color: var(--text-muted);
-      }
-
-      .sparkline--interactive {
-        cursor: pointer;
-      }
-
-      .sparkline--muted {
-        opacity: 0.65;
-      }
-
-      .modal {
-        position: fixed;
-        inset: 0;
-        z-index: 50;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        background: rgba(0, 0, 0, 0.55);
-      }
-
-      .modal.is-hidden {
-        display: none;
-      }
-
-      .modal__dialog {
-        width: min(96vw, 1100px);
-        max-height: calc(100vh - 32px);
-        overflow: auto;
-        background: #05060a;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        padding: 18px;
-        box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
-      }
-
-      .modal__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-
-      .modal__title {
-        margin: 0;
-        font-size: 1.15rem;
-      }
-
-      .modal__subtitle {
-        color: var(--text-muted);
-        margin-top: 4px;
-        font-size: 0.95rem;
-      }
-
-      .modal__body {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .modal__chart {
-        background: rgba(5, 6, 10, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        padding: 12px;
-        position: relative;
-      }
-
-      .modal__chart svg {
-        width: 100%;
-        height: 200px;
-        background: rgba(5, 6, 10, 0.9);
-        border-radius: 10px;
-      }
-
-      .chart-axis {
-        stroke: rgba(255, 255, 255, 0.14);
-        stroke-width: 1;
-      }
-
-      .chart-grid {
-        stroke: rgba(255, 255, 255, 0.06);
-        stroke-width: 1;
-      }
-
-      .chart-tick {
-        fill: var(--text-muted);
-        font-size: 10px;
-      }
-
-      .chart-dot {
-        fill: var(--accent);
-        stroke: rgba(5, 6, 10, 0.9);
-        stroke-width: 1.5;
-        opacity: 0.9;
-        transition: r 0.1s ease, opacity 0.1s ease;
-      }
-
-      .chart-dot.is-highlighted {
-        opacity: 1;
-        r: 4.5;
-      }
-
-      .chart-tooltip {
-        position: absolute;
-        background: rgba(5, 6, 10, 0.92);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 0.9rem;
-        color: #f4f6fb;
-        pointer-events: none;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-        display: none;
-        white-space: nowrap;
-      }
-
-      .chart-tooltip.is-visible {
-        display: block;
-      }
-
-      .modal__meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-
-      .modal__sources {
-        color: var(--text-muted);
-        font-size: 0.95rem;
-      }
-
-      .modal__raw {
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        max-height: min(36vh, 360px);
-        overflow: auto;
-        -webkit-overflow-scrolling: touch;
-      }
-
-      .modal__raw-table {
-        min-width: 860px;
-        width: 100%;
-      }
-
-      .modal__raw-table th,
-      .modal__raw-table td {
-        padding: 8px 10px;
-        vertical-align: top;
-      }
-
-      .modal__raw-table .numeric {
-        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+        color-scheme: light;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-variant-numeric: tabular-nums;
-        white-space: nowrap;
+        color: #202833;
+        background: #f7f8fa;
+        --page: #f7f8fa;
+        --surface: #fff;
+        --border: #dfe3e8;
+        --text: #202833;
+        --muted: #657180;
+        --accent: #245ea8;
+        --accent-soft: #eaf1fa;
+        --danger: #a32c2c;
+        --success: #276444;
+        --warning: #805c13;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-6: 24px;
+        --radius: 5px;
+        --control-height: 38px;
       }
 
-      .modal__raw-candidates {
-        margin-top: 4px;
-        color: var(--text-muted);
-        font-size: 0.78rem;
-        line-height: 1.35;
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--page); color: var(--text); }
+      button, input, select { font: inherit; }
+      button { min-height: var(--control-height); padding: 7px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+      button:hover:not(:disabled) { background: #194b8a; }
+      button:disabled { opacity: .55; cursor: not-allowed; }
+      button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .app { max-width: 1440px; margin: 0 auto; padding: 20px 28px 56px; display: flex; flex-direction: column; gap: 20px; }
+      .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+      .workspace[hidden], .login-panel[hidden] { display: none; }
+      .login-panel { max-width: 460px; margin: 8vh auto; width: calc(100% - 32px); }
+      .login-panel form { gap: 14px; }
+      .login-panel input { width: 100%; }
+      .app__header { min-height: 44px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+      .app-links { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+      .app-links a { color:var(--accent); text-decoration:none; }
+      h1 { margin:0; font-size:1.25rem; letter-spacing:-.02em; }
+      h2 { margin:0; font-size:1.05rem; }
+      .subtitle, .hint, .login-status { color:var(--muted); }
+      .status-chip { color:var(--muted); font-size:.85rem; }
+      .status-chip[data-state="error"] { color:var(--danger); }
+      .status-chip[data-state="ready"] { color:var(--success); }
+      .status-chip[data-state="loading"] { color:var(--accent); }
+      form { display:flex; flex-direction:column; gap:12px; }
+      label { font-weight:600; }
+      .control, .panel-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      input[type="text"], input[type="password"], input[type="number"], select { min-width:0; height:var(--control-height); padding:7px 10px; border:1px solid #bbc4ce; border-radius:var(--radius); background:#fff; color:var(--text); }
+      .control input { flex:1; }
+      .secondary-button, .danger-button, .toggle-button, .modal__close { background:#fff; border:1px solid var(--border); color:var(--text); box-shadow:none; }
+      .danger-button { color:var(--danger); }
+      .panel-header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; }
+      .hint { margin:4px 0 0; font-size:.85rem; }
+      .message { margin-top:8px; font-size:.9rem; }
+      .message[data-tone="error"], .login-status[data-tone="error"] { color:var(--danger); }
+      .message[data-tone="success"], .login-status[data-tone="success"] { color:var(--success); }
+      .auth-grid { display:grid; gap:10px; }
+      .portfolio-summary { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(180px,.6fr); gap:24px; align-items:end; }
+      .label { display:block; margin-bottom:5px; color:var(--muted); font-size:.75rem; font-weight:650; letter-spacing:.045em; text-transform:uppercase; }
+      .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+      .value-large { font-size:1.05rem; font-weight:600; }
+      .portfolio-value { font-size:clamp(2.15rem, 5vw, 3.4rem); line-height:1.08; letter-spacing:-.045em; font-weight:650; }
+      .portfolio-meta { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:12px; color:var(--muted); font-size:.9rem; }
+      .portfolio-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+      .snapshot-details { display:flex; justify-content:space-between; align-items:center; gap:14px; border-top:1px solid var(--border); margin-top:18px; padding-top:12px; color:var(--muted); font-size:.82rem; }
+      .overview-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+      .allocation-list { display:grid; gap:11px; margin-top:14px; }
+      .allocation-item { display:grid; grid-template-columns:minmax(105px, 1fr) minmax(80px, 2fr) auto; gap:10px; align-items:center; font-size:.86rem; }
+      .allocation-name { overflow-wrap:anywhere; }
+      .allocation-track { height:7px; background:#edf0f3; border-radius:10px; overflow:hidden; }
+      .allocation-fill { display:block; height:100%; background:var(--accent); }
+      .allocation-number { text-align:right; white-space:nowrap; }
+      .table-wrapper { margin-top:14px; overflow-x:auto; border-top:1px solid var(--border); }
+      table { width:100%; border-collapse:collapse; font-size:.88rem; }
+      thead { background:#f5f7f9; color:#4c5968; }
+      th, td { padding:10px 12px; text-align:left; border-bottom:1px solid #e8ebef; vertical-align:middle; }
+      th { font-size:.76rem; font-weight:650; }
+      td.numeric, th.numeric { text-align:right; white-space:nowrap; }
+      th button.sort-button { min-height:0; padding:0; border:0; background:none; color:inherit; font-weight:inherit; }
+      tbody tr:hover { background:#f8fafc; }
+      .mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; }
+      .badge { display:inline-flex; padding:2px 7px; border:1px solid var(--border); border-radius:10px; color:var(--muted); font-size:.75rem; }
+      .badge[data-tone="ok"] { color:var(--success); border-color:#b8d6c6; }
+      .badge[data-tone="warning"] { color:var(--warning); border-color:#e3d3a7; }
+      .toggle-button { min-height:28px; padding:3px 8px; font-size:.8rem; }
+      .view-toggle, .holdings-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; }
+      .segmented-control { display:inline-flex; gap:3px; border:1px solid var(--border); border-radius:var(--radius); padding:3px; }
+      .segmented-control button { min-height:30px; padding:4px 10px; border:0; background:transparent; color:var(--muted); }
+      .segmented-control button[aria-pressed="true"] { background:var(--accent-soft); color:var(--accent); }
+      .filter-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .filter-controls input { width:min(240px, 100%); }
+      .details-row { background:#f8fafc; }
+      .details-row > td { padding:12px 18px; }
+      .details-row table { font-size:.83rem; }
+      .is-hidden { display:none !important; }
+      .empty-state { text-align:center; padding:32px; color:var(--muted); }
+      .sparkline { width:110px; height:32px; display:inline-flex; align-items:center; color:var(--muted); gap:4px; }
+      button.sparkline { min-height:0; padding:0; border:0; background:transparent; color:var(--muted); font-weight:400; }
+      button.sparkline:hover:not(:disabled) { background:transparent; }
+      .history-control { display:none; }
+      .sparkline svg { width:100%; height:100%; }
+      .sparkline__line { fill:none; stroke:var(--accent); stroke-width:2; }
+      .sparkline__area { fill:#eaf1fa; stroke:none; }
+      .sparkline__placeholder { font-size:.78rem; color:var(--muted); }
+      .sparkline--interactive { cursor:pointer; }
+      .modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(24,32,42,.42); }
+      .modal.is-hidden { display:none; }
+      .modal__dialog { width:min(96vw,1100px); max-height:calc(100vh - 32px); overflow:auto; background:#fff; border:1px solid var(--border); border-radius:8px; padding:18px; }
+      .modal__header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+      .modal__title { margin:0; font-size:1.15rem; }
+      .modal__subtitle { color:var(--muted); margin-top:4px; font-size:.9rem; }
+      .modal__body { display:flex; flex-direction:column; gap:12px; }
+      .modal__chart { background:#fafbfd; border:1px solid var(--border); border-radius:var(--radius); padding:12px; position:relative; }
+      .modal__chart svg { width:100%; height:200px; }
+      .chart-axis { stroke:#9ba6b2; stroke-width:1; }
+      .chart-grid { stroke:#e6e9ed; stroke-width:1; }
+      .chart-tick { fill:var(--muted); font-size:10px; }
+      .chart-dot { fill:var(--accent); stroke:#fff; stroke-width:1.5; opacity:.9; }
+      .chart-tooltip { position:absolute; background:#202833; color:#fff; border-radius:4px; padding:6px 10px; font-size:.85rem; pointer-events:none; display:none; white-space:nowrap; }
+      .chart-tooltip.is-visible { display:block; }
+      .modal__meta { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+      .modal__sources { color:var(--muted); font-size:.9rem; }
+      .modal__raw { border:1px solid var(--border); max-height:min(36vh,360px); overflow:auto; }
+      .modal__raw-table { min-width:860px; }
+      .modal__raw-table th, .modal__raw-table td { padding:8px 10px; }
+      .modal__raw-table .numeric { white-space:nowrap; }
+      .modal__raw-candidates { margin-top:4px; color:var(--muted); font-size:.78rem; }
+      .modal__badge { display:inline-flex; padding:3px 8px; border:1px solid var(--border); border-radius:10px; font-size:.75rem; }
+      .modal__badge[data-tone="anomaly"] { color:var(--danger); }
+      .modal__badge[data-tone="known-event"] { color:var(--warning); }
+      .modal__alert { color:var(--danger); font-size:.9rem; display:none; }
+      .modal__alert.is-visible { display:block; }
+      .modal__close { border-radius:var(--radius); padding:5px 10px; }
+      .manual-dialog { width:min(96vw,1000px); }
+      .manual-note { margin:0; padding:10px 12px; background:#f5f7f9; border-left:3px solid var(--accent); color:var(--muted); font-size:.88rem; }
+      .crypto-table input { width:100%; min-width:100px; }
+      .crypto-table input[data-field="quantity"] { min-width:120px; }
+      @media (max-width:700px) {
+        .app { padding:14px 12px 36px; gap:12px; }
+        .panel { padding:15px; }
+        .app__header { align-items:flex-start; }
+        .portfolio-summary { grid-template-columns:1fr; gap:16px; }
+        .portfolio-actions { justify-content:flex-start; }
+        .snapshot-details { align-items:flex-start; flex-direction:column; }
+        .overview-grid { grid-template-columns:1fr; gap:14px; }
+        .allocation-item { grid-template-columns:minmax(85px,1fr) minmax(45px,1fr) auto; gap:7px; font-size:.8rem; }
+        .holdings-toolbar { align-items:stretch; }
+        .filter-controls { width:100%; }
+        .filter-controls input { flex:1; width:auto; }
+        .table-wrapper { overflow:visible; border:0; }
+        .table-wrapper > table, .table-wrapper > table thead, .table-wrapper > table tbody, .table-wrapper > table tr, .table-wrapper > table th, .table-wrapper > table td { display:block; }
+        .table-wrapper > table > thead { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+        .table-wrapper > table > tbody > tr { padding:8px 12px; border-bottom:1px solid var(--border); }
+        .table-wrapper > table > tbody > tr.is-hidden { display:none; }
+        .table-wrapper > table > tbody > tr > td { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border:0; text-align:right; overflow-wrap:anywhere; }
+        .table-wrapper > table > tbody > tr > td::before { content:attr(data-label); flex:0 0 38%; color:var(--muted); font-size:.78rem; text-align:left; }
+        .table-wrapper > table > tbody > tr > td:first-child { font-weight:650; }
+        .table-wrapper > table > tbody > tr > td.empty-state { display:block; padding:26px 12px; text-align:center; }
+        .table-wrapper > table > tbody > tr > td.empty-state::before, .details-row > td::before { content:none; }
+        .details-row { padding:0 !important; background:#f5f7f9; }
+        .details-row > td { display:block !important; max-width:100vw; overflow-x:auto; padding:10px !important; }
+        .details-row table { min-width:580px; }
+        .crypto-table input { min-width:0; }
+        #rows-body > tr:not(.details-row) > td[data-label="Price trend"] { display:none; }
+        #rows-body > tr:not(.details-row) > td[data-label="Sources"] > span { display:none; }
+        .history-control { display:inline-flex; min-height:26px; margin-top:4px; padding:3px 7px; font-size:.78rem; }
+        .modal { align-items:flex-start; padding:10px; overflow-y:auto; }
+        .modal__dialog { width:100%; padding:14px; }
+        .modal__raw-table { min-width:0; }
+        .modal__raw-table, .modal__raw-table thead, .modal__raw-table tbody, .modal__raw-table tr, .modal__raw-table th, .modal__raw-table td { display:block; }
+        .modal__raw-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+        .modal__raw-table tr { padding:10px; border-bottom:1px solid var(--border); }
+        .modal__raw-table td { display:flex; justify-content:space-between; gap:12px; padding:5px 0; border:0; text-align:right; white-space:normal; }
+        .modal__raw-table td::before { content:attr(data-label); color:var(--muted); font-weight:650; text-align:left; }
       }
-
-      .modal__badge {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 3px 8px;
-        border: 1px solid var(--panel-border);
-        font-size: 0.75rem;
-        font-weight: 600;
-        white-space: nowrap;
-      }
-
-      .modal__badge[data-tone="anomaly"] {
-        color: var(--danger);
-        border-color: rgba(255, 107, 107, 0.55);
-        background: rgba(255, 107, 107, 0.08);
-      }
-
-      .modal__badge[data-tone="known-event"] {
-        color: #ffd66b;
-        border-color: rgba(255, 214, 107, 0.55);
-        background: rgba(255, 214, 107, 0.08);
-      }
-
-      .modal__alert {
-        color: var(--danger);
-        font-size: 0.9rem;
-        display: none;
-      }
-
-      .modal__alert.is-visible {
-        display: block;
-      }
-
-      .modal__close {
-        background: none;
-        color: inherit;
-        border: 1px solid var(--panel-border);
-        border-radius: 10px;
-        padding: 8px 12px;
-        cursor: pointer;
-      }
-
-      .modal__close:hover {
-        border-color: var(--accent);
-        color: var(--accent);
-      }
-
-      @media (max-width: 700px) {
-        .app {
-          padding: 24px 16px 56px;
-        }
-
-        .panel {
-          padding: 20px;
-        }
-
-        .app__header {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .panel-header {
-          flex-direction: column;
-        }
-
-        .panel-actions {
-          width: 100%;
-          justify-content: flex-start;
-        }
-
-        table {
-          font-size: 0.85rem;
-        }
-
-        .table-wrapper {
-          border-radius: 14px;
-          overflow: visible;
-        }
-
-        .table-wrapper > table,
-        .table-wrapper > table thead,
-        .table-wrapper > table tbody,
-        .table-wrapper > table tr,
-        .table-wrapper > table th,
-        .table-wrapper > table td {
-          display: block;
-        }
-
-        .table-wrapper > table > thead {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          padding: 0;
-          margin: -1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border: 0;
-        }
-
-        .table-wrapper > table > tbody > tr {
-          padding: 14px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .table-wrapper > table > tbody > tr.is-hidden {
-          display: none;
-        }
-
-        .table-wrapper > table > tbody > tr:last-child {
-          border-bottom: 0;
-        }
-
-        .table-wrapper > table > tbody > tr:hover {
-          background: transparent;
-        }
-
-        .table-wrapper > table > tbody > tr > td {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 16px;
-          padding: 8px 0;
-          border-bottom: 0;
-          text-align: right;
-          overflow-wrap: anywhere;
-        }
-
-        .table-wrapper > table > tbody > tr > td::before {
-          content: attr(data-label);
-          flex: 0 0 42%;
-          color: var(--text-muted);
-          font-weight: 700;
-          text-align: left;
-        }
-
-        .table-wrapper > table > tbody > tr > td:first-child {
-          align-items: center;
-          font-size: 1rem;
-          font-weight: 700;
-        }
-
-        .table-wrapper > table > tbody > tr > td.source-cell {
-          display: block;
-          text-align: left;
-        }
-
-        .table-wrapper > table > tbody > tr > td.source-cell::before {
-          display: block;
-          margin-bottom: 8px;
-        }
-
-        .source-cell__content {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 8px 12px;
-          width: 100%;
-        }
-
-        .source-cell__symbols {
-          grid-column: 1 / -1;
-          overflow-wrap: anywhere;
-          white-space: normal;
-        }
-
-        .source-cell__toggle {
-          align-self: start;
-          justify-self: end;
-        }
-
-        .table-wrapper > table > tbody > tr > td:has(.sparkline) {
-          align-items: center;
-        }
-
-        .table-wrapper > table > tbody > tr > td.empty-state {
-          display: block;
-          padding: 32px 16px;
-          text-align: center;
-        }
-
-        .table-wrapper > table > tbody > tr > td.empty-state::before,
-        .details-row > td::before {
-          content: none;
-        }
-
-        .details-row {
-          padding: 0 !important;
-          background: rgba(255, 255, 255, 0.03);
-        }
-
-        .details-row > td {
-          display: block !important;
-          padding: 12px !important;
-          text-align: left !important;
-        }
-
-        .details-row table {
-          min-width: 620px;
-        }
-
-        .modal {
-          align-items: flex-start;
-          padding: 10px;
-          overflow-y: auto;
-        }
-
-        .modal__dialog {
-          width: 100%;
-          padding: 14px;
-        }
-
-        .modal__raw-table {
-          min-width: 0;
-        }
-
-        .modal__raw-table,
-        .modal__raw-table thead,
-        .modal__raw-table tbody,
-        .modal__raw-table tr,
-        .modal__raw-table th,
-        .modal__raw-table td {
-          display: block;
-        }
-
-        .modal__raw-table thead {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          padding: 0;
-          margin: -1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border: 0;
-        }
-
-        .modal__raw-table tr {
-          padding: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .modal__raw-table td {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 6px 0;
-          border-bottom: 0;
-          text-align: right;
-          white-space: normal;
-          overflow-wrap: anywhere;
-        }
-
-        .modal__raw-table td::before {
-          content: attr(data-label);
-          flex: 0 0 38%;
-          color: var(--text-muted);
-          font-weight: 700;
-          text-align: left;
-        }
-
-        .modal__raw-candidates {
-          text-align: left;
-        }
-      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; } }
     </style>
   </head>
   <body>
     <main class="app">
-      <section class="panel">
-        <div class="app__header">
-          <div>
-            <h1>Fintracker</h1>
-          </div>
-          <div class="app-links">
-            <a href="/jobs.html">Job health</a>
-            <div class="status-chip" id="status-chip" data-state="idle">Idle</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
+      <section class="panel login-panel" id="login-panel">
+        <h1>Fintracker</h1>
+        <p class="hint">Sign in to view your portfolio.</p>
         <form id="login-form">
-          <label for="login-username">Demo login</label>
-          <div class="auth-grid">
-            <input id="login-username" type="text" placeholder="Username" autocomplete="username" required />
-            <input
-              id="login-password"
-              type="password"
-              placeholder="Password"
-              autocomplete="current-password"
-              required
-            />
-            <button type="submit" id="login-btn">Log in</button>
-          </div>
-          <p class="login-status" id="login-feedback">Sign in to load valuation snapshots.</p>
+          <label for="login-username">Sign in</label>
+          <input id="login-username" type="text" placeholder="Username" autocomplete="username" required />
+          <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" required />
+          <button type="submit" id="login-btn">Sign in</button>
+          <p class="login-status" id="login-feedback" role="status" aria-live="polite">Sign in to load valuation snapshots.</p>
         </form>
       </section>
 
-      <section class="panel">
-        <form id="account-form">
-          <label for="account-id">Account ID</label>
-          <div class="control">
-            <input id="account-id" name="account" type="text" placeholder="e.g. 8e9d4d54f0b7" required />
-            <button type="submit" id="load-btn">Load snapshot</button>
+      <div class="workspace" id="workspace" hidden>
+        <header class="app__header">
+          <h1>Fintracker</h1>
+          <nav class="app-links" aria-label="Main navigation">
+            <a href="#overview">Overview</a><a href="#holdings">Holdings</a><a href="/jobs.html">Job health</a>
+            <span class="status-chip" id="status-chip" data-state="idle">Idle</span>
+            <button type="button" class="secondary-button" id="account-menu-btn">Account</button>
+            <button type="button" class="secondary-button" id="sign-out-btn">Sign out</button>
+          </nav>
+        </header>
+
+        <section class="panel" id="overview">
+          <div class="portfolio-summary">
+            <div>
+              <span class="label">Portfolio value</span>
+              <div class="portfolio-value" id="total-value">—</div>
+              <div class="portfolio-meta"><span id="snapshot-date">As of —</span><span id="positions-count">— assets · — rows</span><span id="ok-positions">—</span></div>
+            </div>
+            <div class="portfolio-actions">
+              <button type="button" id="refresh-btn">Refresh snapshot</button>
+              <button type="button" class="secondary-button" id="manage-holdings-btn">Manage holdings</button>
+            </div>
           </div>
-          <p class="hint">Enter an account id to load its snapshot.</p>
           <div class="message" id="feedback" role="status" aria-live="polite"></div>
-        </form>
+          <div class="snapshot-details"><span id="base-currency">Snapshot currency —</span><span>Account <span id="account-label" class="mono">—</span></span><span>Computed <span id="computed-ts">—</span></span></div>
+        </section>
 
-        <div class="meta-grid">
-          <div>
-            <span class="label">Snapshot date</span>
-            <div class="value-large" id="snapshot-date">—</div>
-          </div>
-          <div>
-            <span class="label">Computed at</span>
-            <div class="value-large" id="computed-ts">—</div>
-          </div>
-          <div>
-            <span class="label">Account</span>
-            <div class="value-large mono" id="account-label">—</div>
-          </div>
-        </div>
+        <section class="overview-grid" aria-label="Portfolio allocation">
+          <section class="panel"><h2>By instrument type</h2><div class="allocation-list" id="type-allocations"></div></section>
+          <section class="panel"><h2>By source</h2><div class="allocation-list" id="source-allocations"></div></section>
+        </section>
 
-        <div class="totals">
-          <div>
-            <span class="label">Total value</span>
-            <div class="value-large" id="total-value">—</div>
-            <div class="hint" id="base-currency">Base currency —</div>
-          </div>
-          <div>
-            <span class="label">Positions</span>
-            <div class="value-large" id="positions-count">—</div>
-            <div class="hint" id="ok-positions">OK positions —</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2 style="margin: 0">Manual crypto</h2>
-            <p class="hint" id="crypto-summary">Log in to load holdings.</p>
-          </div>
-          <div class="panel-actions">
-            <button type="button" class="secondary-button" id="crypto-load-btn">Load</button>
-            <button type="button" class="secondary-button" id="crypto-add-btn">Add row</button>
-            <button type="button" id="crypto-save-btn">Save</button>
-          </div>
-        </div>
-        <div class="message" id="crypto-feedback" role="status" aria-live="polite"></div>
-        <div class="table-wrapper" role="region" aria-live="polite">
-          <table class="crypto-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Quantity</th>
-                <th>Source</th>
-                <th>Name</th>
-                <th>Currency</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="crypto-body">
-              <tr>
-                <td colspan="6" class="empty-state">Log in to load manual crypto holdings.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <header>
-          <h2 style="margin: 0" id="valuations-title">Positions</h2>
-          <div class="view-toggle" aria-label="Valuation view selector">
-            <span class="label" style="margin: 0">View by</span>
-            <div class="segmented-control">
+        <section class="panel" id="holdings">
+          <header class="panel-header">
+            <div><h2 id="valuations-title">Holdings</h2><p class="hint" id="rows-summary">No snapshot loaded yet.</p></div>
+            <div class="segmented-control" aria-label="Valuation view selector">
               <button type="button" data-view-mode="position" aria-pressed="true">Position</button>
               <button type="button" data-view-mode="source" aria-pressed="false">Source</button>
             </div>
+          </header>
+          <div class="holdings-toolbar">
+            <div class="filter-controls">
+              <input id="holdings-search" type="text" placeholder="Search symbol or source" aria-label="Search holdings" />
+              <select id="type-filter" aria-label="Filter by asset type"><option value="">All types</option></select>
+              <select id="source-filter" aria-label="Filter by source"><option value="">All sources</option></select>
+              <label class="sr-only" for="sort-select">Sort holdings</label>
+              <select id="sort-select" aria-label="Sort holdings"><option value="value:desc">Value high to low</option><option value="value:asc">Value low to high</option><option value="name:asc">Name A to Z</option><option value="name:desc">Name Z to A</option><option value="weight:desc">Weight high to low</option><option value="weight:asc">Weight low to high</option></select>
+              <button type="button" class="secondary-button" id="reset-filters-btn">Reset</button>
+            </div>
+            <button type="button" class="secondary-button" id="edit-account-btn">Edit account</button>
           </div>
-          <p class="hint" id="rows-summary">No snapshot loaded yet.</p>
-        </header>
-        <div class="table-wrapper" role="region" aria-live="polite">
-          <table>
-            <thead id="rows-head">
-              <tr>
-                <th>Symbol</th>
-                <th>Trend</th>
-                <th>Source</th>
-                <th>Unit price</th>
-                <th>Quantity</th>
-                <th>Value</th>
-                <th>% of portfolio</th>
-              </tr>
-            </thead>
-            <tbody id="rows-body">
-              <tr>
-                <td colspan="7" class="empty-state">Enter an account id and load a snapshot to see positions.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <p class="hint">Position filters include each matching asset’s full portfolio value and source breakdown. Source view filters complete source groups. Filters combine.</p>
+          <div class="table-wrapper" role="region" aria-label="Portfolio holdings">
+            <table><thead id="rows-head"></thead><tbody id="rows-body"><tr><td colspan="6" class="empty-state">Sign in and load a snapshot to see holdings.</td></tr></tbody></table>
+          </div>
+        </section>
+
+        <form id="account-form" class="is-hidden" aria-label="Load account snapshot">
+          <label for="account-id">Account ID</label>
+          <div class="control"><input id="account-id" name="account" type="text" placeholder="Account ID" required /><button type="submit" id="load-btn">Load snapshot</button></div>
+        </form>
+      </div>
     </main>
+
+    <div class="modal is-hidden" id="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+      <section class="modal__dialog"><header class="modal__header"><h2 class="modal__title" id="account-modal-title">Account</h2><button type="button" class="modal__close" id="account-modal-close" aria-label="Close account settings">×</button></header>
+        <form id="account-edit-form"><label for="account-id-dialog">Account ID</label><div class="control"><input id="account-id-dialog" type="text" autocomplete="off" required /><button type="submit">Load account</button></div><p class="hint">Enter an account ID you can access.</p></form>
+      </section>
+    </div>
+
+    <div class="modal is-hidden" id="manual-modal" role="dialog" aria-modal="true" aria-labelledby="manual-title">
+      <section class="modal__dialog manual-dialog">
+        <header class="modal__header"><div><h2 class="modal__title" id="manual-title">Manual crypto holdings</h2><p class="hint" id="crypto-summary">Log in to load holdings.</p></div><button type="button" class="modal__close" id="manual-modal-close" aria-label="Close manual holdings">×</button></header>
+        <p class="manual-note">This editor manages the shared manual holdings file, including entries with other account IDs. Saving does not recompute valuations. Portfolio values update after the next valuation run.</p>
+        <div class="panel-actions" style="margin-top:12px"><button type="button" class="secondary-button" id="crypto-load-btn">Reload</button><button type="button" class="secondary-button" id="crypto-add-btn">Add row</button><button type="button" id="crypto-save-btn">Save holdings</button></div>
+        <div class="message" id="crypto-feedback" role="status" aria-live="polite"></div>
+        <div class="table-wrapper" role="region" aria-label="Manual crypto holdings"><table class="crypto-table"><thead><tr><th>Symbol</th><th>Quantity</th><th>Source</th><th>Name</th><th>Currency</th><th></th></tr></thead><tbody id="crypto-body"><tr><td colspan="6" class="empty-state">Log in to load manual crypto holdings.</td></tr></tbody></table></div>
+      </section>
+    </div>
 
     <div class="modal is-hidden" id="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
       <div class="modal__dialog">
@@ -1070,13 +353,32 @@
         historyModalToggle: document.getElementById("history-modal-toggle"),
         historyModalSeriesToggle: document.getElementById("history-modal-series-toggle"),
         historyModalClose: document.getElementById("history-modal-close"),
+        loginPanel: document.getElementById("login-panel"),
+        workspace: document.getElementById("workspace"),
+        typeAllocations: document.getElementById("type-allocations"),
+        sourceAllocations: document.getElementById("source-allocations"),
+        holdingsSearch: document.getElementById("holdings-search"),
+        typeFilter: document.getElementById("type-filter"),
+        sourceFilter: document.getElementById("source-filter"),
+        sortSelect: document.getElementById("sort-select"),
+        resetFiltersButton: document.getElementById("reset-filters-btn"),
+        refreshButton: document.getElementById("refresh-btn"),
+        signOutButton: document.getElementById("sign-out-btn"),
+        manageHoldingsButton: document.getElementById("manage-holdings-btn"),
+        manualModal: document.getElementById("manual-modal"),
+        manualModalClose: document.getElementById("manual-modal-close"),
+        accountModal: document.getElementById("account-modal"),
+        accountModalClose: document.getElementById("account-modal-close"),
+        accountMenuButton: document.getElementById("account-menu-btn"),
+        editAccountButton: document.getElementById("edit-account-btn"),
+        accountEditForm: document.getElementById("account-edit-form"),
+        accountDialogInput: document.getElementById("account-id-dialog"),
       };
 
       const STORAGE_KEY = "fintracker.accountId";
       const AUTH_STORAGE_KEY = "fintracker.auth";
       const REQUEST_TIMEOUT_MS = 30_000;
       const PERCENT_SCALE = 100;
-      const TABLE_COLUMN_COUNT = 7;
       const CRYPTO_TABLE_COLUMN_COUNT = 6;
       const DEFAULT_CRYPTO_CURRENCY = "USD";
       const DEFAULT_CRYPTO_MARKET = "crypto";
@@ -1103,6 +405,16 @@
       let latestValuationPayload = null;
       let valuationViewMode = "position";
       let manualCryptoHoldings = [];
+      const holdingsFilters = { search: "", type: "", source: "" };
+      let sortState = { key: "value", direction: "desc" };
+      let requestGeneration = 0;
+      let snapshotController = null;
+      let manualDirty = false;
+      let manualLoaded = false;
+      let manualOpener = null;
+      let historyGeneration = 0;
+      let historyOpener = null;
+      let accountOpener = null;
 
       const authState = {
         token: null,
@@ -1185,12 +497,28 @@
       }
 
       function clearAuthState(message) {
+        requestGeneration += 1;
+        if (snapshotController) snapshotController.abort();
         authState.token = null;
         authState.expiresAt = 0;
         clearStoredAuth();
         priceHistoryCache.clear();
         lastBaseCurrency = "";
         latestValuationPayload = null;
+        dom.workspace.hidden = true;
+        dom.loginPanel.hidden = false;
+        dom.totalValue.textContent = "—";
+        dom.snapshotDate.textContent = "As of —";
+        dom.computedTs.textContent = "—";
+        dom.accountLabel.textContent = "—";
+        dom.positionsCount.textContent = "— assets · — rows";
+        dom.okPositions.textContent = "—";
+        dom.typeAllocations.replaceChildren();
+        dom.sourceAllocations.replaceChildren();
+        dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">Sign in and load a snapshot to see holdings.</td></tr>';
+        closeHistoryModal();
+        dom.accountModal.classList.add("is-hidden");
+        dom.manualModal.classList.add("is-hidden");
         resetManualCryptoView();
         if (message) {
           setLoginFeedback(message, "error");
@@ -1215,7 +543,10 @@
           authState.token = payload.access_token;
           const expiresInSeconds = Number(payload.expires_in) || 0;
           authState.expiresAt = Date.now() + expiresInSeconds * 1000;
+          requestGeneration += 1;
           persistAuthState();
+          dom.loginPanel.hidden = true;
+          dom.workspace.hidden = false;
           setLoginFeedback("Authenticated.", "success");
           setStatus("Authenticated", "ready");
           loadManualCryptoHoldings();
@@ -1318,40 +649,23 @@
       }
 
       function valueFromRow(row) {
-        if (row.value_base !== null && row.value_base !== undefined) return row.value_base;
-        if (row.unit_price_base !== null && row.unit_price_base !== undefined && row.quantity !== null && row.quantity !== undefined) {
-          return row.unit_price_base * row.quantity;
-        }
-        return null;
+        const value = Number(row?.value_base);
+        return row?.value_base !== null && row?.value_base !== undefined && Number.isFinite(value) ? value : null;
       }
 
       function setValuationsHeader(mode, baseCurrency) {
         const currencyLabel = baseCurrency || "base";
-        dom.valuationsTitle.textContent = mode === "source" ? "Sources" : "Positions";
-        dom.rowsHead.innerHTML =
-          mode === "source"
-            ? `
-              <tr>
-                <th>Source</th>
-                <th>Total value (${currencyLabel})</th>
-                <th>% of portfolio</th>
-                <th>Positions</th>
-                <th>OK / Missing</th>
-                <th>Markets</th>
-                <th>Allocation</th>
-              </tr>
-            `
-            : `
-              <tr>
-                <th>Symbol</th>
-                <th>Trend</th>
-                <th>Source</th>
-                <th>Unit price (${currencyLabel})</th>
-                <th>Quantity</th>
-                <th>Value (${currencyLabel})</th>
-                <th>% of portfolio</th>
-              </tr>
-            `;
+        dom.valuationsTitle.textContent = mode === "source" ? "Holdings by source" : "Holdings";
+        const columns = mode === "source"
+          ? [["Source", "source"], [`Value (${currencyLabel})`, "value"], ["Weight", "weight"]]
+          : [["Asset", "asset"], ["Price trend · 30 days", "trend"], [`Value (${currencyLabel})`, "value"], ["Weight", "weight"], ["Sources", "sources"]];
+        dom.rowsHead.innerHTML = `<tr>${columns.map(([label, key]) => key === "trend" || key === "sources" ? `<th>${label}</th>` : `<th class="numeric" aria-sort="${sortState.key === key ? (sortState.direction === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort-button" data-sort-key="${key}">${label}${sortState.key === key ? (sortState.direction === "asc" ? " ↑" : " ↓") : ""}</button></th>`).join("")}</tr>`;
+        syncSortSelect();
+      }
+
+      function syncSortSelect() {
+        const nameSort = sortState.key === "asset" || sortState.key === "source";
+        dom.sortSelect.value = `${nameSort ? "name" : sortState.key}:${sortState.direction}`;
       }
 
       function renderSparklinePlaceholder(container, text, muted = false) {
@@ -1439,12 +753,6 @@
         svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
         svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         const area = document.createElementNS(svg.namespaceURI, "path");
-        const bg = document.createElementNS(svg.namespaceURI, "rect");
-        bg.setAttribute("x", "0");
-        bg.setAttribute("y", "0");
-        bg.setAttribute("width", String(width));
-        bg.setAttribute("height", String(height));
-        bg.setAttribute("fill", "rgba(5, 6, 10, 0.9)");
         const areaPath = [
           `M 0 ${height}`,
           ...points.map((p) => `L ${p.x} ${p.y}`),
@@ -1456,7 +764,7 @@
         const path = document.createElementNS(svg.namespaceURI, "path");
         path.setAttribute("d", `M ${points.map((p) => `${p.x} ${p.y}`).join(" L ")}`);
         path.setAttribute("class", "sparkline__line");
-        svg.append(bg, area, path);
+        svg.append(area, path);
         return svg;
       }
 
@@ -1491,14 +799,6 @@
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
         svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-
-        const bg = document.createElementNS(svg.namespaceURI, "rect");
-        bg.setAttribute("x", "0");
-        bg.setAttribute("y", "0");
-        bg.setAttribute("width", String(width));
-        bg.setAttribute("height", String(height));
-        bg.setAttribute("fill", "rgba(5, 6, 10, 0.9)");
-        svg.appendChild(bg);
 
         const axisGroup = document.createElementNS(svg.namespaceURI, "g");
         const xAxisY = margin.top + innerHeight;
@@ -1658,6 +958,8 @@
           return priceHistoryCache.get(cacheKey);
         }
         const controller = new AbortController();
+        const sessionToken = authState.token;
+        const sessionGeneration = requestGeneration;
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         const fetchPromise = fetch(
           `/api/prices/history?symbol=${encodeURIComponent(normalizedSymbol)}&days=${windowDays}${
@@ -1667,7 +969,7 @@
         )
           .then(async (response) => {
             if (!response.ok) {
-              if (response.status === 401) {
+              if (response.status === 401 && sessionToken === authState.token && sessionGeneration === requestGeneration && hasValidToken()) {
                 handleUnauthorized();
               }
               const detail = await response.json().catch(() => ({}));
@@ -1686,7 +988,7 @@
 
       async function renderSparklines(baseCurrency) {
         if (!ensureAuthenticated()) return;
-        const elements = Array.from(dom.rowsBody.querySelectorAll("[data-sparkline-symbol]"));
+        const elements = Array.from(dom.rowsBody.querySelectorAll(".sparkline[data-sparkline-symbol]"));
         if (!elements.length) return;
         const jobs = elements.map(async (el) => {
           const symbol = el.dataset.sparklineSymbol;
@@ -1720,274 +1022,160 @@
         await Promise.allSettled(jobs);
       }
 
-      function renderRows(rows, baseCurrency, totalPortfolioValue) {
-        setValuationsHeader("position", baseCurrency);
-        if (!rows || !rows.length) {
-          dom.rowsBody.innerHTML =
-            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">No positions in this snapshot.</td></tr>`;
-          dom.rowsSummary.textContent = "0 positions.";
+      function finiteValue(value) {
+        return value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
+      }
+
+      function renderAllocations(container, entries, total, currency) {
+        container.replaceChildren();
+        if (!Number.isFinite(total) || total <= 0) {
+          container.innerHTML = '<p class="hint">Allocation weights are unavailable for this portfolio total.</p>';
           return;
         }
+        if (!entries.length) {
+          container.innerHTML = '<p class="hint">No valued positions.</p>';
+          return;
+        }
+        entries.forEach(({ name, value }) => {
+          const pct = value / total * PERCENT_SCALE;
+          const item = document.createElement("div");
+          item.className = "allocation-item";
+          item.innerHTML = `<span class="allocation-name">${name}</span><span class="allocation-track" aria-label="${formatPercent(pct)}"><span class="allocation-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></span></span><span class="allocation-number">${formatCurrency(value, currency)} · ${formatPercent(pct)}</span>`;
+          container.appendChild(item);
+        });
+      }
 
-        const portfolioTotal =
-          typeof totalPortfolioValue === "number" && Number.isFinite(totalPortfolioValue)
-            ? totalPortfolioValue
-            : null;
-
-        const groupMap = new Map();
+      function updateAllocationViews(payload, currency) {
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        const total = finiteValue(payload.totals?.total_value_base);
+        const typeTotals = new Map();
         rows.forEach((row) => {
-          if (!groupMap.has(row.symbol)) groupMap.set(row.symbol, []);
-          groupMap.get(row.symbol).push(row);
+          const value = valueFromRow(row);
+          if (value === null) return;
+          const type = (row.asset_type || "Unknown").toString().trim() || "Unknown";
+          typeTotals.set(type, (typeTotals.get(type) || 0) + value);
         });
+        renderAllocations(dom.typeAllocations, Array.from(typeTotals, ([name, value]) => ({ name, value })).sort((a,b) => b.value-a.value || a.name.localeCompare(b.name)), total, currency);
+        const sourceAllocations = Array.isArray(payload.source_allocations) ? payload.source_allocations : [];
+        const sourceTotals = new Map();
+        if (sourceAllocations.length) {
+          sourceAllocations.forEach((entry) => {
+            const value = finiteValue(entry.total_value_base);
+            if (value !== null) sourceTotals.set(sourceDisplayName(entry.source), (sourceTotals.get(sourceDisplayName(entry.source)) || 0) + value);
+          });
+        } else {
+          rows.forEach((row) => {
+            const value = valueFromRow(row);
+            if (value === null) return;
+            const source = sourceDisplayName(row.source);
+            sourceTotals.set(source, (sourceTotals.get(source) || 0) + value);
+          });
+        }
+        renderAllocations(dom.sourceAllocations, Array.from(sourceTotals, ([name, value]) => ({ name, value })).sort((a,b) => b.value-a.value || a.name.localeCompare(b.name)), total, currency);
+        const types = Array.from(new Set(rows.map((row) => (row.asset_type || "Unknown").toString().trim() || "Unknown"))).sort();
+        const sources = Array.from(new Set(rows.map((row) => sourceDisplayName(row.source)))).sort();
+        const selectedType = dom.typeFilter.value;
+        const selectedSource = dom.sourceFilter.value;
+        dom.typeFilter.innerHTML = '<option value="">All types</option>' + types.map((item) => `<option>${item}</option>`).join("");
+        dom.sourceFilter.innerHTML = '<option value="">All sources</option>' + sources.map((item) => `<option>${item}</option>`).join("");
+        dom.typeFilter.value = selectedType;
+        dom.sourceFilter.value = selectedSource;
+      }
 
-        const groups = Array.from(groupMap.entries()).map(([symbol, symbolRows]) => {
-          const totalQuantity = symbolRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0);
-          const totalValue = symbolRows.reduce((sum, r) => {
-            const value =
-              r.value_base !== null && r.value_base !== undefined
-                ? r.value_base
-                : r.unit_price_base !== null &&
-                  r.unit_price_base !== undefined &&
-                  r.quantity !== null &&
-                  r.quantity !== undefined
-                ? r.unit_price_base * r.quantity
-                : null;
-            return value !== null && value !== undefined ? sum + value : sum;
-          }, 0);
-          const averagePrice = totalQuantity > 0 ? totalValue / totalQuantity : null;
-          const percentOfPortfolio =
-            portfolioTotal && portfolioTotal > 0 ? (totalValue / portfolioTotal) * PERCENT_SCALE : null;
-          return { symbol, rows: symbolRows, totalQuantity, totalValue, averagePrice, percentOfPortfolio };
+      function currentSearch() { return holdingsFilters.search.trim().toLocaleLowerCase(); }
+      function sorted(items, key) {
+        return items.sort((a,b) => {
+          const av = key === "weight" ? a.share : key === "asset" || key === "source" ? a.name.toLocaleLowerCase() : a.value;
+          const bv = key === "weight" ? b.share : key === "asset" || key === "source" ? b.name.toLocaleLowerCase() : b.value;
+          if (av === null || av === undefined) return bv === null || bv === undefined ? a.name.localeCompare(b.name) : 1;
+          if (bv === null || bv === undefined) return -1;
+          const compare = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+          return (sortState.direction === "asc" ? compare : -compare) || a.name.localeCompare(b.name);
         });
+      }
 
-        groups.sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0));
-
-        const fragment = document.createDocumentFragment();
-        groups.forEach((group, index) => {
-          const toggleId = `details-${index}`;
-          const hasDetails = group.rows.length > 1;
-          const summarySources = Array.from(
-            new Set(group.rows.map((r) => sourceDisplayName(r.source || r.market)))
-          );
-
+      function renderRows(rows, baseCurrency, totalPortfolioValue) {
+        setValuationsHeader("position", baseCurrency);
+        const total = finiteValue(totalPortfolioValue);
+        const search = currentSearch();
+        const groups = new Map();
+        (rows || []).forEach((row) => {
+          const symbol = (row.symbol || "Unknown").toString();
+          if (!groups.has(symbol)) groups.set(symbol, []);
+          groups.get(symbol).push(row);
+        });
+        let items = Array.from(groups, ([name, groupRows]) => {
+          const known = groupRows.map(valueFromRow).filter((value) => value !== null);
+          const value = known.length ? known.reduce((sum, item) => sum + item, 0) : null;
+          const types = Array.from(new Set(groupRows.map((row) => (row.asset_type || "Unknown").toString().trim() || "Unknown")));
+          const sources = Array.from(new Set(groupRows.map((row) => sourceDisplayName(row.source))));
+          const text = `${name} ${sources.join(" ")}`.toLocaleLowerCase();
+          if (search && !text.includes(search) || holdingsFilters.type && !types.includes(holdingsFilters.type) || holdingsFilters.source && !sources.includes(holdingsFilters.source)) return null;
+          return { name, rows: groupRows, value, share: value !== null && total > 0 ? value / total * PERCENT_SCALE : null, types, sources };
+        }).filter(Boolean);
+        items = sorted(items, sortState.key === "asset" ? "asset" : sortState.key === "weight" ? "weight" : "value");
+        dom.rowsBody.replaceChildren();
+        if (!items.length) {
+          dom.rowsBody.innerHTML = `<tr><td colspan="5" class="empty-state">${groups.size ? "No holdings match these filters." : "No positions in this snapshot."}</td></tr>`;
+          dom.rowsSummary.textContent = groups.size ? "No matching assets." : "0 assets · 0 snapshot rows.";
+          return;
+        }
+        const frag = document.createDocumentFragment();
+        items.forEach((item, index) => {
+          const id = `details-${index}`;
           const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td data-label="Symbol">
-              <div>${group.symbol}</div>
-              <div class="hint mono">${group.rows[0]?.asset_type ?? ""}</div>
-            </td>
-            <td data-label="Trend">
-              <div class="sparkline sparkline--muted" data-sparkline-symbol="${group.symbol}">
-                <span class="sparkline__placeholder">Loading…</span>
-              </div>
-            </td>
-            <td data-label="Source">
-              ${summarySources.join(", ")}
-              ${
-                hasDetails
-                  ? `<button class="toggle-button" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle details">></button>`
-                  : ""
-              }
-            </td>
-            <td class="mono" data-label="Unit price">${formatCurrency(group.averagePrice, baseCurrency)}</td>
-            <td class="mono" data-label="Quantity">${formatNumber(group.totalQuantity)}</td>
-            <td class="mono" data-label="Value">${formatCurrency(group.totalValue, baseCurrency)}</td>
-            <td class="mono" data-label="% of portfolio">${formatPercent(group.percentOfPortfolio)}</td>
-          `;
-          fragment.appendChild(tr);
-
-          if (!hasDetails) {
-            return;
-          }
-
-          const detailRow = document.createElement("tr");
-          detailRow.id = toggleId;
-          detailRow.className = "details-row is-hidden";
-          const detailCell = document.createElement("td");
-          detailCell.colSpan = TABLE_COLUMN_COUNT;
-
-          const innerTable = document.createElement("table");
-          innerTable.innerHTML = `
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Unit price</th>
-                <th>Quantity</th>
-                <th>Value</th>
-                <th>% of portfolio</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${group.rows
-                .map((row) => {
-                  const unitPriceUsd = row.unit_price_base;
-                  const quantity = row.quantity;
-                  const valueUsd =
-                    row.value_base !== null && row.value_base !== undefined
-                      ? row.value_base
-                      : unitPriceUsd !== null &&
-                        unitPriceUsd !== undefined &&
-                        quantity !== null &&
-                        quantity !== undefined
-                      ? unitPriceUsd * quantity
-                      : null;
-                  return `
-                    <tr>
-                      <td data-label="Source">${sourceDisplayName(row.source || row.market)}</td>
-                      <td class="mono" data-label="Unit price">${formatCurrency(unitPriceUsd, baseCurrency)}</td>
-                      <td class="mono" data-label="Quantity">${formatNumber(quantity)}</td>
-                      <td class="mono" data-label="Value">${formatCurrency(valueUsd, baseCurrency)}</td>
-                      <td class="mono" data-label="% of portfolio">${formatPercent(row.portfolio_share_pct)}</td>
-                      <td data-label="Status">
-                        ${
-                          row.status
-                            ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>`
-                            : ""
-                        }
-                      </td>
-                    </tr>
-                  `;
-                })
-                .join("")}
-            </tbody>
-          `;
-
-          detailCell.appendChild(innerTable);
-          detailRow.appendChild(detailCell);
-          fragment.appendChild(detailRow);
+          const sourcesLabel = item.sources.length === 1 ? item.sources[0] : `${item.sources.length} sources`;
+          const partial = item.rows.some((row) => valueFromRow(row) === null);
+          tr.innerHTML = `<td data-label="Asset"><div>${item.name}</div><div class="hint">${item.types.join(", ")}</div><button type="button" class="history-control secondary-button" data-sparkline-symbol="${item.name}" aria-label="Open 30-day price history for ${item.name}">Price history</button></td><td data-label="Price trend"><button type="button" class="sparkline sparkline--muted" data-sparkline-symbol="${item.name}" aria-label="Open 30-day price history for ${item.name}"><span class="sparkline__placeholder">Loading…</span></button></td><td class="numeric" data-label="Value">${item.value === null ? "Unavailable" : `${formatCurrency(item.value, baseCurrency)}${partial ? " · incomplete" : ""}`}</td><td class="numeric" data-label="Weight">${item.share === null ? "Unavailable" : formatPercent(item.share)}</td><td data-label="Sources"><span>${sourcesLabel}</span> <button type="button" class="toggle-button" data-toggle-details="${id}" data-label-collapsed="Show source details for ${item.name}" data-label-expanded="Hide source details for ${item.name}" aria-expanded="false" aria-controls="${id}" aria-label="Show source details for ${item.name}">Details</button></td>`;
+          frag.appendChild(tr);
+          const details = document.createElement("tr"); details.id = id; details.className = "details-row is-hidden";
+          const cell = document.createElement("td"); cell.colSpan = 5;
+          cell.innerHTML = `<table><thead><tr><th>Source</th><th>Asset type</th><th>Quantity</th><th>Unit price (${baseCurrency || "base"})</th><th>Value (${baseCurrency || "base"})</th><th>Status</th></tr></thead><tbody>${item.rows.map((row) => `<tr><td>${sourceDisplayName(row.source)}</td><td>${row.asset_type || "Unknown"}</td><td class="numeric">${formatNumber(row.quantity, { maximumFractionDigits: 8 })}</td><td class="numeric">${formatCurrency(row.unit_price_base, baseCurrency)}</td><td class="numeric">${formatCurrency(valueFromRow(row), baseCurrency)}</td><td>${row.status ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>` : "—"}</td></tr>`).join("")}</tbody></table>`;
+          details.appendChild(cell); frag.appendChild(details);
         });
-        dom.rowsBody.replaceChildren(fragment);
-        const summaryCurrency = baseCurrency || "base";
-        dom.rowsSummary.textContent = `${rows.length} positions (grouped by symbol, sorted by ${summaryCurrency} value).`;
+        dom.rowsBody.appendChild(frag);
+        const matches = items.reduce((count, item) => count + item.rows.length, 0);
+        const subtotal = items.map((item) => item.value).filter((value) => value !== null).reduce((sum, value) => sum + value, 0);
+        dom.rowsSummary.textContent = `${items.length} matching assets · ${matches} snapshot rows · known subtotal ${formatCurrency(subtotal, baseCurrency)}. Weights use the full portfolio total.`;
+        renderSparklines(baseCurrency);
       }
 
       function renderSourceRows(payload, baseCurrency) {
         setValuationsHeader("source", baseCurrency);
-        const allocations = payload?.source_allocations || [];
-        const rows = payload?.rows || [];
-        if (!allocations.length) {
-          dom.rowsBody.innerHTML =
-            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">No source allocations in this snapshot.</td></tr>`;
-          dom.rowsSummary.textContent = "0 sources.";
-          return;
-        }
-
-        const rowsBySource = new Map();
-        rows.forEach((row) => {
-          const key = sourceKey(row.source);
-          if (!rowsBySource.has(key)) rowsBySource.set(key, []);
-          rowsBySource.get(key).push(row);
-        });
-
-        const fragment = document.createDocumentFragment();
-        allocations.forEach((allocation, index) => {
-          const key = sourceKey(allocation.source);
-          const sourceRows = rowsBySource.get(key) || [];
-          const toggleId = `source-details-${index}`;
-          const hasDetails = sourceRows.length > 0;
-          const width = Math.max(0, Math.min(PERCENT_SCALE, Number(allocation.portfolio_share_pct) || 0));
-          const markets = Array.isArray(allocation.markets) && allocation.markets.length ? allocation.markets.join(", ") : "—";
-          const topSymbols = Array.isArray(allocation.top_symbols) && allocation.top_symbols.length
-            ? allocation.top_symbols.join(", ")
-            : "No symbols";
-
+        const allocations = Array.isArray(payload.source_allocations) ? payload.source_allocations : [];
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        const total = finiteValue(payload.totals?.total_value_base);
+        const grouped = new Map();
+        rows.forEach((row) => { const key = sourceKey(row.source); if (!grouped.has(key)) grouped.set(key, []); grouped.get(key).push(row); });
+        const all = allocations.length ? allocations.map((entry) => ({ name: sourceDisplayName(entry.source), key: sourceKey(entry.source), value: finiteValue(entry.total_value_base), rows: grouped.get(sourceKey(entry.source)) || [] })) : Array.from(grouped, ([key, sourceRows]) => ({ name: sourceDisplayName(key), key, value: sourceRows.map(valueFromRow).filter((v) => v !== null).reduce((a,b) => a+b, 0), rows: sourceRows }));
+        const search = currentSearch();
+        let items = all.filter((item) => {
+          const rowText = item.rows.map((row) => `${row.symbol || ""} ${row.asset_type || "Unknown"}`).join(" ").toLocaleLowerCase();
+          return (!search || `${item.name} ${rowText}`.toLocaleLowerCase().includes(search)) && (!holdingsFilters.source || item.name === holdingsFilters.source) && (!holdingsFilters.type || item.rows.some((row) => (row.asset_type || "Unknown") === holdingsFilters.type));
+        }).map((item) => ({ ...item, share: item.value !== null && total > 0 ? item.value / total * PERCENT_SCALE : null }));
+        items = sorted(items, sortState.key === "source" || sortState.key === "asset" ? "source" : sortState.key === "weight" ? "weight" : "value");
+        dom.rowsBody.replaceChildren();
+        if (!items.length) { dom.rowsBody.innerHTML = `<tr><td colspan="3" class="empty-state">No source groups match these filters.</td></tr>`; dom.rowsSummary.textContent = "No matching sources."; return; }
+        const frag = document.createDocumentFragment();
+        items.forEach((item, index) => {
           const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td class="source-cell" data-label="Source">
-              <div class="source-cell__content">
-                <div class="source-cell__name">
-                  <div>${sourceDisplayName(allocation.source)}</div>
-                  <div class="hint mono">${allocation.source || "unknown"}</div>
-                </div>
-                <div class="hint source-cell__symbols">${topSymbols}</div>
-                ${
-                  hasDetails
-                    ? `<button class="toggle-button source-cell__toggle" type="button" data-toggle-details="${toggleId}" aria-expanded="false" aria-label="Toggle source details">></button>`
-                    : ""
-                }
-              </div>
-            </td>
-            <td class="mono" data-label="Total value">${formatCurrency(allocation.total_value_base, baseCurrency)}</td>
-            <td class="mono" data-label="% of portfolio">${formatPercent(allocation.portfolio_share_pct)}</td>
-            <td class="mono" data-label="Positions">${formatNumber(allocation.positions, { maximumFractionDigits: 0 })}</td>
-            <td data-label="OK / Missing">
-              <span class="badge" data-tone="ok">${allocation.ok_positions ?? 0} ok</span>
-              <span class="badge" data-tone="${allocation.non_ok_positions ? "warning" : "ok"}">${allocation.non_ok_positions ?? 0} missing</span>
-            </td>
-            <td data-label="Markets">${markets}</td>
-            <td data-label="Allocation">
-              <div class="allocation-bar" aria-label="${formatPercent(allocation.portfolio_share_pct)} allocation">
-                <span class="allocation-bar__fill" style="width: ${width}%"></span>
-              </div>
-            </td>
-          `;
-          fragment.appendChild(tr);
-
-          if (!hasDetails) return;
-          const detailRow = document.createElement("tr");
-          detailRow.id = toggleId;
-          detailRow.className = "details-row is-hidden";
-          const detailCell = document.createElement("td");
-          detailCell.colSpan = TABLE_COLUMN_COUNT;
-          const innerTable = document.createElement("table");
-          innerTable.innerHTML = `
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Asset type</th>
-                <th>Quantity</th>
-                <th>Value (${baseCurrency || "base"})</th>
-                <th>% of portfolio</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sourceRows
-                .slice()
-                .sort((a, b) => (valueFromRow(b) || 0) - (valueFromRow(a) || 0))
-                .map((row) => {
-                  const value = valueFromRow(row);
-                  return `
-                    <tr>
-                      <td class="mono" data-label="Symbol">${row.symbol || "—"}</td>
-                      <td data-label="Asset type">${row.asset_type || "—"}</td>
-                      <td class="mono" data-label="Quantity">${formatNumber(row.quantity)}</td>
-                      <td class="mono" data-label="Value">${formatCurrency(value, baseCurrency)}</td>
-                      <td class="mono" data-label="% of portfolio">${formatPercent(row.portfolio_share_pct)}</td>
-                      <td data-label="Status">
-                        ${
-                          row.status
-                            ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>`
-                            : ""
-                        }
-                      </td>
-                    </tr>
-                  `;
-                })
-                .join("")}
-            </tbody>
-          `;
-          detailCell.appendChild(innerTable);
-          detailRow.appendChild(detailCell);
-          fragment.appendChild(detailRow);
+          const id = `source-details-${index}`;
+          tr.innerHTML = `<td data-label="Source">${item.name} <button type="button" class="toggle-button" data-toggle-details="${id}" data-label-collapsed="Show positions from ${item.name}" data-label-expanded="Hide positions from ${item.name}" aria-expanded="false" aria-controls="${id}" aria-label="Show positions from ${item.name}">Details</button></td><td class="numeric" data-label="Value">${formatCurrency(item.value, baseCurrency)}</td><td class="numeric" data-label="Weight">${item.share === null ? "Unavailable" : formatPercent(item.share)}</td>`;
+          frag.appendChild(tr);
+          const details = document.createElement("tr"); details.id = id; details.className = "details-row is-hidden";
+          const cell = document.createElement("td"); cell.colSpan = 3;
+          cell.innerHTML = `<table><thead><tr><th>Asset</th><th>Type</th><th>Quantity</th><th>Unit price</th><th>Value</th><th>Status</th></tr></thead><tbody>${item.rows.map((row) => `<tr><td>${row.symbol || "—"}</td><td>${row.asset_type || "Unknown"}</td><td class="numeric">${formatNumber(row.quantity, { maximumFractionDigits: 8 })}</td><td class="numeric">${formatCurrency(row.unit_price_base, baseCurrency)}</td><td class="numeric">${formatCurrency(valueFromRow(row), baseCurrency)}</td><td>${row.status || "—"}</td></tr>`).join("")}</tbody></table>`;
+          details.appendChild(cell); frag.appendChild(details);
         });
-        dom.rowsBody.replaceChildren(fragment);
-        dom.rowsSummary.textContent = `${allocations.length} sources (sorted by ${baseCurrency || "base"} value).`;
+        dom.rowsBody.appendChild(frag);
+        dom.rowsSummary.textContent = `${items.length} matching source groups. Weights use the full portfolio total.`;
       }
 
       function renderValuationPayload() {
         if (!latestValuationPayload) return;
-        if (valuationViewMode === "source") {
-          renderSourceRows(latestValuationPayload, lastBaseCurrency);
-          return;
-        }
-        renderRows(
-          latestValuationPayload.rows,
-          lastBaseCurrency,
-          latestValuationPayload.totals?.total_value_base
-        );
-        renderSparklines(lastBaseCurrency);
+        updateAllocationViews(latestValuationPayload, lastBaseCurrency);
+        if (valuationViewMode === "source") renderSourceRows(latestValuationPayload, lastBaseCurrency);
+        else renderRows(latestValuationPayload.rows, lastBaseCurrency, latestValuationPayload.totals?.total_value_base);
       }
 
       function clearHistoryModalRawTable() {
@@ -2154,7 +1342,9 @@
         if (!ensureAuthenticated()) return;
         const normalized = (symbol || "").trim();
         if (!normalized) return;
+        const generation = ++historyGeneration;
         chartState.symbol = normalized;
+        historyOpener = document.activeElement;
         chartState.history = null;
         chartState.currencyMode = "base";
         chartState.seriesMode = "raw";
@@ -2168,11 +1358,13 @@
         dom.historyModalSeriesToggle.disabled = true;
         try {
           const history = await fetchPriceHistory(normalized, lastBaseCurrency || undefined);
+          if (generation !== historyGeneration || !hasValidToken()) return;
           chartState.history = history;
           chartState.currencyMode = history && history.missing_fx ? "native" : "base";
           chartState.seriesMode = defaultSeriesMode(history);
           renderHistoryModal();
         } catch (error) {
+          if (generation !== historyGeneration) return;
           dom.historyModalChart.innerHTML = `<div class="sparkline__placeholder">${
             error.message || "Failed to load history."
           }</div>`;
@@ -2186,12 +1378,15 @@
       }
 
       function closeHistoryModal() {
+        historyGeneration += 1;
         dom.historyModal.classList.add("is-hidden");
         chartState.symbol = null;
         chartState.history = null;
         chartState.currencyMode = "base";
         chartState.seriesMode = "raw";
         clearHistoryModalRawTable();
+        if (historyOpener?.isConnected && !dom.workspace.hidden) historyOpener.focus();
+        historyOpener = null;
       }
 
       function authHeaders() {
@@ -2343,6 +1538,9 @@
           setCryptoFeedback("Please log in before loading manual crypto holdings.", "error");
           return;
         }
+        if (manualDirty && !window.confirm("Reloading will discard unsaved manual holdings changes. Continue?")) return;
+        manualDirty = false;
+        const generation = requestGeneration;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         setCryptoButtonsDisabled(true);
@@ -2353,6 +1551,7 @@
             signal: controller.signal,
           });
           if (!response.ok) {
+            if (generation !== requestGeneration) return;
             if (response.status === 401) {
               handleUnauthorized();
             }
@@ -2360,10 +1559,13 @@
             throw new Error(detail.detail || `Request failed with status ${response.status}`);
           }
           const payload = await response.json();
+          if (generation !== requestGeneration || !hasValidToken()) return;
           renderManualCryptoHoldings(payload.holdings || []);
+          manualDirty = false;
+          manualLoaded = true;
           setCryptoFeedback("Manual crypto holdings loaded.", "success");
         } catch (error) {
-          setCryptoFeedback(error.name === "AbortError" ? "Request timed out." : error.message, "error");
+          if (generation === requestGeneration) setCryptoFeedback(error.name === "AbortError" ? "Request timed out." : error.message, "error");
         } finally {
           setCryptoButtonsDisabled(false);
           clearTimeout(timeout);
@@ -2384,6 +1586,7 @@
           return;
         }
 
+        const generation = requestGeneration;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         setCryptoButtonsDisabled(true);
@@ -2396,6 +1599,7 @@
             signal: controller.signal,
           });
           if (!response.ok) {
+            if (generation !== requestGeneration) return;
             if (response.status === 401) {
               handleUnauthorized();
             }
@@ -2403,14 +1607,33 @@
             throw new Error(detail.detail || `Save failed with status ${response.status}`);
           }
           const payload = await response.json();
+          if (generation !== requestGeneration || !hasValidToken()) return;
           renderManualCryptoHoldings(payload.holdings || []);
-          setCryptoFeedback("Manual crypto holdings saved.", "success");
+          manualDirty = false;
+          manualLoaded = true;
+          setCryptoFeedback("Saved. Portfolio values update after the next valuation run.", "success");
         } catch (error) {
-          setCryptoFeedback(error.name === "AbortError" ? "Save timed out." : error.message, "error");
+          if (generation === requestGeneration) setCryptoFeedback(error.name === "AbortError" ? "Save timed out." : error.message, "error");
         } finally {
           setCryptoButtonsDisabled(false);
           clearTimeout(timeout);
         }
+      }
+
+      function clearSnapshotForSwitch(accountId) {
+        latestValuationPayload = null;
+        lastBaseCurrency = "";
+        dom.totalValue.textContent = "—";
+        dom.snapshotDate.textContent = "As of —";
+        dom.computedTs.textContent = "—";
+        dom.accountLabel.textContent = accountId;
+        dom.positionsCount.textContent = "— assets · — rows";
+        dom.okPositions.textContent = "—";
+        dom.typeAllocations.replaceChildren();
+        dom.sourceAllocations.replaceChildren();
+        dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading account snapshot…</td></tr>';
+        dom.rowsSummary.textContent = "Loading snapshot.";
+        priceHistoryCache.clear();
       }
 
       async function loadSnapshot(accountId) {
@@ -2418,7 +1641,13 @@
           setFeedback("Please log in before loading a snapshot.", "error");
           return;
         }
+        const normalizedAccount = accountId.trim();
+        const switchingAccount = latestValuationPayload && latestValuationPayload.account_id !== normalizedAccount;
+        if (!latestValuationPayload || switchingAccount) clearSnapshotForSwitch(normalizedAccount);
+        if (snapshotController) snapshotController.abort();
+        const generation = ++requestGeneration;
         const controller = new AbortController();
+        snapshotController = controller;
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         setStatus("Loading…", "loading");
         setFeedback("Fetching snapshot…");
@@ -2426,9 +1655,11 @@
 
         try {
           const response = await fetch(
-            `/api/valuations/latest?account_id=${encodeURIComponent(accountId.trim())}`,
+            `/api/valuations/latest?account_id=${encodeURIComponent(normalizedAccount)}`,
             { signal: controller.signal, headers: authHeaders() }
           );
+
+          if (generation !== requestGeneration || controller.signal.aborted) return;
 
           if (!response.ok) {
             if (response.status === 401) {
@@ -2439,7 +1670,8 @@
           }
 
           const payload = await response.json();
-          dom.snapshotDate.textContent = formatDate(payload.snapshot_dt);
+          if (generation !== requestGeneration || controller.signal.aborted || !hasValidToken()) return;
+          dom.snapshotDate.textContent = `As of ${formatDate(payload.snapshot_dt)}`;
           dom.computedTs.textContent = formatDateTime(payload.computed_ts);
           dom.accountLabel.textContent = payload.account_id;
           lastBaseCurrency = (payload.base_currency || payload.totals?.base_currency || "").toString().toUpperCase();
@@ -2448,29 +1680,36 @@
             payload.totals?.total_value_base,
             payload.base_currency || payload.totals?.base_currency
           );
-          dom.baseCurrency.textContent = `Base currency ${lastBaseCurrency || "—"}`;
-          dom.positionsCount.textContent = payload.totals?.positions ?? "—";
-          dom.okPositions.textContent = `OK positions ${payload.totals?.ok_positions ?? "—"}`;
+          dom.baseCurrency.textContent = `Snapshot currency ${lastBaseCurrency || "—"}`;
+          const rows = Array.isArray(payload.rows) ? payload.rows : [];
+          const assets = new Set(rows.map((row) => row.symbol || "Unknown")).size;
+          dom.positionsCount.textContent = `${assets} assets · ${payload.totals?.positions ?? rows.length} snapshot rows`;
+          const okRows = Number(payload.totals?.ok_positions) || 0;
+          const totalRows = Number(payload.totals?.positions) || rows.length;
+          dom.okPositions.textContent = `${okRows} of ${totalRows} rows status ok${totalRows > okRows ? ` · ${totalRows - okRows} non-ok or missing` : ""}`;
 
           latestValuationPayload = payload;
           renderValuationPayload();
           setStatus("Snapshot ready", "ready");
-          setFeedback(`Snapshot loaded for account ${payload.account_id}.`, "success");
-          localStorage.setItem(STORAGE_KEY, accountId.trim());
+          setFeedback(`Latest available snapshot loaded. Refresh does not start a valuation run.`, "success");
+          localStorage.setItem(STORAGE_KEY, normalizedAccount);
         } catch (error) {
+          if (generation !== requestGeneration || controller.signal.aborted) return;
           if (error.name === "AbortError") {
             setFeedback("Request timed out. Try again.", "error");
           } else {
             setFeedback(error.message || "Failed to load snapshot.", "error");
           }
           setStatus("Error", "error");
-          lastBaseCurrency = "";
-          latestValuationPayload = null;
-          dom.rowsBody.innerHTML =
-            `<tr><td colspan="${TABLE_COLUMN_COUNT}" class="empty-state">Could not load positions. Check the account id and try again.</td></tr>`;
-          dom.rowsSummary.textContent = "Request failed.";
+          if (!latestValuationPayload || latestValuationPayload.account_id !== normalizedAccount) {
+            latestValuationPayload = null;
+            dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">No snapshot is available for this account.</td></tr>';
+            dom.rowsSummary.textContent = "Snapshot unavailable.";
+          } else {
+            setFeedback(`Refresh failed. Showing the snapshot from ${formatDate(latestValuationPayload.snapshot_dt)}. ${error.message || "Try again."}`, "error");
+          }
         } finally {
-          dom.submitButton.disabled = false;
+          if (generation === requestGeneration) dom.submitButton.disabled = false;
           clearTimeout(timeout);
         }
       }
@@ -2496,12 +1735,88 @@
         authenticate(username, password);
       });
 
+      function renderFilteredHoldings() { if (latestValuationPayload) renderValuationPayload(); }
+      dom.holdingsSearch.addEventListener("input", () => { holdingsFilters.search = dom.holdingsSearch.value; renderFilteredHoldings(); });
+      dom.typeFilter.addEventListener("change", () => { holdingsFilters.type = dom.typeFilter.value; renderFilteredHoldings(); });
+      dom.sourceFilter.addEventListener("change", () => { holdingsFilters.source = dom.sourceFilter.value; renderFilteredHoldings(); });
+      dom.resetFiltersButton.addEventListener("click", () => {
+        holdingsFilters.search = ""; holdingsFilters.type = ""; holdingsFilters.source = "";
+        dom.holdingsSearch.value = ""; dom.typeFilter.value = ""; dom.sourceFilter.value = "";
+        renderFilteredHoldings();
+      });
+      dom.rowsHead.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-sort-key]");
+        if (!button) return;
+        const key = button.dataset.sortKey;
+        sortState = { key, direction: sortState.key === key && sortState.direction === "desc" ? "asc" : "desc" };
+        renderFilteredHoldings();
+      });
+      dom.sortSelect.addEventListener("change", () => {
+        const [selectedKey, direction] = dom.sortSelect.value.split(":");
+        const key = selectedKey === "name" ? (valuationViewMode === "source" ? "source" : "asset") : selectedKey;
+        sortState = { key, direction: direction === "asc" ? "asc" : "desc" };
+        renderFilteredHoldings();
+      });
+      dom.refreshButton.addEventListener("click", () => {
+        const account = (latestValuationPayload?.account_id || dom.accountInput.value).trim();
+        if (account) loadSnapshot(account);
+      });
+      dom.signOutButton.addEventListener("click", () => {
+        clearAuthState("Signed out.");
+        setStatus("Signed out", "idle");
+        setFeedback();
+        dom.loginUsername.focus();
+      });
+
+      function openAccountDialog() {
+        accountOpener = document.activeElement;
+        dom.accountDialogInput.value = latestValuationPayload?.account_id || dom.accountInput.value;
+        dom.accountModal.classList.remove("is-hidden");
+        dom.accountDialogInput.focus();
+      }
+      dom.accountMenuButton.addEventListener("click", openAccountDialog);
+      dom.editAccountButton.addEventListener("click", openAccountDialog);
+      function closeAccountDialog() {
+        dom.accountModal.classList.add("is-hidden");
+        if (accountOpener?.isConnected) accountOpener.focus();
+        accountOpener = null;
+      }
+      dom.accountModalClose.addEventListener("click", closeAccountDialog);
+      dom.accountModal.addEventListener("click", (event) => { if (event.target === dom.accountModal) closeAccountDialog(); });
+      dom.accountEditForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const accountId = dom.accountDialogInput.value.trim();
+        if (!accountId) return;
+        if (manualDirty && !window.confirm("Discard unsaved manual holdings changes before changing accounts?")) return;
+        dom.accountInput.value = accountId;
+        closeAccountDialog();
+        localStorage.setItem(STORAGE_KEY, accountId);
+        loadSnapshot(accountId);
+      });
+
+      function closeManualDialog() {
+        if (manualDirty && !window.confirm("Discard unsaved manual holdings changes?")) return;
+        manualDirty = false;
+        dom.manualModal.classList.add("is-hidden");
+        if (manualOpener?.isConnected) manualOpener.focus();
+      }
+      dom.manageHoldingsButton.addEventListener("click", () => {
+        manualOpener = dom.manageHoldingsButton;
+        dom.manualModal.classList.remove("is-hidden");
+        if (!manualLoaded) loadManualCryptoHoldings();
+        dom.cryptoLoadButton.focus();
+      });
+      dom.manualModalClose.addEventListener("click", closeManualDialog);
+      dom.manualModal.addEventListener("click", (event) => { if (event.target === dom.manualModal) closeManualDialog(); });
+
 
       document.querySelectorAll("[data-view-mode]").forEach((button) => {
         button.addEventListener("click", () => {
           const mode = button.dataset.viewMode === "source" ? "source" : "position";
           if (mode === valuationViewMode) return;
           valuationViewMode = mode;
+          if (mode === "source" && sortState.key === "asset") sortState.key = "source";
+          if (mode === "position" && sortState.key === "source") sortState.key = "asset";
           document.querySelectorAll("[data-view-mode]").forEach((toggle) => {
             toggle.setAttribute("aria-pressed", String(toggle.dataset.viewMode === valuationViewMode));
           });
@@ -2514,6 +1829,7 @@
       dom.cryptoAddButton.addEventListener("click", () => {
         manualCryptoHoldings.push(emptyCryptoHolding());
         renderManualCryptoHoldings(manualCryptoHoldings);
+        manualDirty = true;
         setCryptoFeedback();
       });
       dom.cryptoBody.addEventListener("input", (event) => {
@@ -2522,6 +1838,7 @@
         const rowIndex = Number(input.dataset.rowIndex);
         if (!Number.isInteger(rowIndex) || !manualCryptoHoldings[rowIndex]) return;
         manualCryptoHoldings[rowIndex][input.dataset.field] = input.value;
+        manualDirty = true;
       });
       dom.cryptoBody.addEventListener("click", (event) => {
         const removeButton = event.target.closest("[data-remove-crypto-row]");
@@ -2530,6 +1847,7 @@
         if (!Number.isInteger(rowIndex)) return;
         manualCryptoHoldings.splice(rowIndex, 1);
         renderManualCryptoHoldings(manualCryptoHoldings);
+        manualDirty = true;
         setCryptoFeedback();
       });
 
@@ -2539,21 +1857,26 @@
         if (savedAccount) {
           dom.accountInput.value = savedAccount;
           if (restoredAuth) {
+            dom.loginPanel.hidden = true;
+            dom.workspace.hidden = false;
             setLoginFeedback("Authenticated for this browser session.", "success");
             setStatus("Authenticated", "ready");
-            setFeedback("Account id restored. Load the snapshot when ready.");
+            setFeedback("Loading the saved account snapshot…");
             loadManualCryptoHoldings();
+            loadSnapshot(savedAccount);
           } else {
-            setFeedback("Account id restored. Log in and load the snapshot when ready.");
+            setFeedback("Account ID restored. Sign in to load its latest snapshot.");
           }
         } else {
           if (restoredAuth) {
+            dom.loginPanel.hidden = true;
+            dom.workspace.hidden = false;
             setLoginFeedback("Authenticated for this browser session.", "success");
             setStatus("Authenticated", "ready");
-            setFeedback("Enter an account id to get started.");
+            setFeedback("Choose Account to enter an account ID.");
             loadManualCryptoHoldings();
           } else {
-            setFeedback("Log in, then enter an account id to get started.");
+            setFeedback("Sign in to load a snapshot.");
           }
         }
       })();
@@ -2575,7 +1898,8 @@
         const isHidden = detailRow.classList.contains("is-hidden");
         detailRow.classList.toggle("is-hidden", !isHidden);
         button.setAttribute("aria-expanded", String(isHidden));
-        button.textContent = isHidden ? "v" : ">";
+        button.textContent = isHidden ? "Hide" : "Details";
+        button.setAttribute("aria-label", isHidden ? button.dataset.labelExpanded : button.dataset.labelCollapsed);
       });
 
       dom.historyModalClose.addEventListener("click", closeHistoryModal);
@@ -2595,9 +1919,21 @@
         }
       });
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !dom.historyModal.classList.contains("is-hidden")) {
-          closeHistoryModal();
+        const activeModal = !dom.historyModal.classList.contains("is-hidden") ? dom.historyModal : !dom.manualModal.classList.contains("is-hidden") ? dom.manualModal : !dom.accountModal.classList.contains("is-hidden") ? dom.accountModal : null;
+        if (event.key === "Tab" && activeModal) {
+          const focusable = Array.from(activeModal.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hidden);
+          if (focusable.length) {
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+          }
+          return;
         }
+        if (event.key !== "Escape") return;
+        if (!dom.historyModal.classList.contains("is-hidden")) closeHistoryModal();
+        else if (!dom.manualModal.classList.contains("is-hidden")) closeManualDialog();
+        else if (!dom.accountModal.classList.contains("is-hidden")) closeAccountDialog();
       });
     </script>
   </body>

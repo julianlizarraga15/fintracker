@@ -136,6 +136,13 @@ def _clean_group_value(value, fallback: str = "unknown") -> str:
     return text or fallback
 
 
+def _optional_text(value) -> Optional[str]:
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _unique_sorted(values) -> list[str]:
     return sorted({_clean_group_value(value, "") for value in values if _clean_group_value(value, "")})
 
@@ -193,16 +200,16 @@ def _build_rows(df: pd.DataFrame, total_value_base: Optional[float]) -> list[Val
                 value_base=value_base,
                 unit_price_base=safe_float(record.get("unit_price_base")),
                 unit_price_native=safe_float(record.get("unit_price_native")),
-                unit_price_native_ccy=record.get("unit_price_native_ccy"),
+                unit_price_native_ccy=_optional_text(record.get("unit_price_native_ccy")),
                 fx_rate_to_base=safe_float(record.get("fx_rate_to_base")),
-                account_id=record.get("account_id"),
-                source=record.get("source"),
-                market=record.get("market"),
-                asset_type=record.get("asset_type"),
-                status=record.get("status"),
-                price_source=record.get("price_source"),
+                account_id=_optional_text(record.get("account_id")),
+                source=_optional_text(record.get("source")),
+                market=_optional_text(record.get("market")),
+                asset_type=_optional_text(record.get("asset_type")),
+                status=_optional_text(record.get("status")),
+                price_source=_optional_text(record.get("price_source")),
                 price_quality_score=safe_int(record.get("price_quality_score")),
-                fx_source=record.get("fx_source"),
+                fx_source=_optional_text(record.get("fx_source")),
                 portfolio_share_pct=_compute_portfolio_share(value_base, total_value_base),
             )
         )

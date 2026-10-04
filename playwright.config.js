@@ -18,5 +18,5 @@ module.exports = defineConfig({
     { name: 'desktop', use: { browserName: 'chromium', viewport: { width: 1440, height: 900 } } },
     { name: 'mobile', use: { browserName: 'chromium', viewport: { width: 390, height: 844 } } },
   ],
-  webServer: { command: 'node scripts/e2e_server.js', url: 'http://127.0.0.1:4173/health', reuseExistingServer: !process.env.CI, timeout: 60_000 },
+  webServer: process.env.E2E_EXTERNAL_SERVER ? undefined : { command: 'node scripts/e2e_server.js', url: 'http://127.0.0.1:4173/health', reuseExistingServer: !process.env.CI, timeout: 60_000 },
 });

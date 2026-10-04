@@ -137,6 +137,34 @@ def test_get_latest_valuation_snapshot_builds_source_allocations(tmp_path, monke
     assert binance.top_symbols == ["BTC"]
 
 
+def test_get_latest_valuation_snapshot_preserves_missing_instrument_type(tmp_path, monkeypatch):
+    valuations_dir = tmp_path / "valuations"
+    _write_snapshot(
+        valuations_dir,
+        "2024-11-15",
+        "acc-123",
+        [{
+            "snapshot_dt": "2024-11-15",
+            "computed_ts": "2024-11-15T08:30:00Z",
+            "symbol": "UNPRICED",
+            "quantity": 2.5,
+            "value_base": None,
+            "status": "missing_price",
+            "source": None,
+            "market": None,
+            "asset_type": None,
+        }],
+    )
+    monkeypatch.setattr(valuations, "VALUATIONS_DIR", valuations_dir)
+
+    response = valuations.get_latest_valuation_snapshot("acc-123")
+
+    assert response.rows[0].asset_type is None
+    assert response.rows[0].source is None
+    assert response.rows[0].market is None
+    assert response.rows[0].value_base is None
+
+
 def test_get_latest_valuation_snapshot_missing_account(tmp_path, monkeypatch):
     valuations_dir = tmp_path / "valuations"
     (valuations_dir / "dt=2024-11-01").mkdir(parents=True)
