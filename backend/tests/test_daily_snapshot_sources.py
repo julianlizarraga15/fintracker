@@ -4,6 +4,13 @@ from backend.core import daily_snapshot
 from backend.core.sources import iol as iol_source
 
 
+def test_iol_instrument_labels_normalize_to_canonical_asset_types():
+    assert daily_snapshot._normalized_asset_type("CEDEARS") == "cedear"
+    assert daily_snapshot._normalized_asset_type("FondoComundeInversion") == "fci"
+    assert daily_snapshot._normalized_asset_type(" EQUITY ") == "equity"
+    assert daily_snapshot._normalized_asset_type("unrecognized label") is None
+
+
 def test_iol_source_preserves_daily_snapshot_fallback_shape():
     raw_items = [
         {

@@ -125,6 +125,10 @@ VALID_ASSET_TYPES = {
     "cash",
     "other",
 }
+ASSET_TYPE_ALIASES = {
+    "cedears": "cedear",
+    "fondocomundeinversion": "fci",
+}
 
 
 def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, Any]]:
@@ -250,6 +254,7 @@ def _normalized_asset_type(raw_value: Any) -> str | None:
     if raw_value is None:
         return None
     normalized = str(raw_value).strip().lower()
+    normalized = ASSET_TYPE_ALIASES.get(normalized, normalized)
     return normalized if normalized in VALID_ASSET_TYPES else None
 
 
