@@ -9,15 +9,15 @@
         color-scheme: light;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-variant-numeric: tabular-nums;
-        color: #202833;
-        background: #f7f8fa;
-        --page: #f7f8fa;
+        color: #202d29;
+        background: #f5f5f0;
+        --page: #f5f5f0;
         --surface: #fff;
-        --border: #dfe3e8;
-        --text: #202833;
-        --muted: #657180;
-        --accent: #245ea8;
-        --accent-soft: #eaf1fa;
+        --border: #e3e6de;
+        --text: #202d29;
+        --muted: #727b73;
+        --accent: #225b46;
+        --accent-soft: #edf3ec;
         --danger: #a32c2c;
         --success: #276444;
         --warning: #805c13;
@@ -26,15 +26,15 @@
         --space-3: 12px;
         --space-4: 16px;
         --space-6: 24px;
-        --radius: 5px;
-        --control-height: 38px;
+        --radius: 12px;
+        --control-height: 40px;
       }
 
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; background: var(--page); color: var(--text); }
       button, input, select { font: inherit; }
       button { min-height: var(--control-height); padding: 7px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
-      button:hover:not(:disabled) { background: #194b8a; }
+      button:hover:not(:disabled) { background: #194735; }
       button:disabled { opacity: .55; cursor: not-allowed; }
       button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .app { max-width: 1440px; margin: 0 auto; padding: 20px 28px 56px; display: flex; flex-direction: column; gap: 20px; }
@@ -111,7 +111,7 @@
       .history-control { display:none; }
       .sparkline svg { width:100%; height:100%; }
       .sparkline__line { fill:none; stroke:var(--accent); stroke-width:2; }
-      .sparkline__area { fill:#eaf1fa; stroke:none; }
+      .sparkline__area { fill:#edf3ec; stroke:none; }
       .sparkline__placeholder { font-size:.78rem; color:var(--muted); }
       .sparkline--interactive { cursor:pointer; }
       .modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(24,32,42,.42); }
@@ -127,7 +127,7 @@
       .chart-grid { stroke:#e6e9ed; stroke-width:1; }
       .chart-tick { fill:var(--muted); font-size:10px; }
       .chart-dot { fill:var(--accent); stroke:#fff; stroke-width:1.5; opacity:.9; }
-      .chart-tooltip { position:absolute; background:#202833; color:#fff; border-radius:4px; padding:6px 10px; font-size:.85rem; pointer-events:none; display:none; white-space:nowrap; }
+      .chart-tooltip { position:absolute; background:#202d29; color:#fff; border-radius:4px; padding:6px 10px; font-size:.85rem; pointer-events:none; display:none; white-space:nowrap; }
       .chart-tooltip.is-visible { display:block; }
       .modal__meta { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
       .modal__sources { color:var(--muted); font-size:.9rem; }
@@ -185,6 +185,124 @@
         .modal__raw-table td::before { content:attr(data-label); color:var(--muted); font-weight:650; text-align:left; }
       }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; } }
+
+      .workspace { display:flex; flex-direction:column; gap:24px; }
+      .app { max-width:1400px; padding:24px 40px 64px; }
+      .app__header { padding:0 2px 22px; border-bottom:1px solid var(--border); }
+      .app__header h1, .login-panel h1 { font-size:1.5rem; font-weight:750; letter-spacing:-.065em; display:flex; align-items:center; gap:10px; }
+      .brand-mark { width:32px; height:32px; color:var(--accent); }
+      .action-icon { width:16px; height:16px; flex:none; vertical-align:-3px; margin-right:7px; }
+      .app-links { gap:24px; font-size:.85rem; }
+      .app-links a { color:var(--muted); font-weight:550; }
+      .app-links a:hover { color:var(--accent); }
+      .status-chip { display:inline-flex; align-items:center; gap:6px; font-size:.75rem; }
+      .status-chip::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+      .panel { padding:26px 28px; border:1px solid #e8eae3; border-radius:16px; }
+      #overview { padding:34px 36px 20px; }
+      .portfolio-summary { align-items:center; }
+      .portfolio-value { font-size:clamp(2.5rem,5vw,4rem); font-weight:600; letter-spacing:-.065em; }
+      .label { font-size:.7rem; letter-spacing:.11em; margin-bottom:12px; }
+      .portfolio-meta { font-size:.8rem; margin-top:16px; }
+      .snapshot-details { margin-top:30px; padding-top:15px; font-size:.75rem; }
+      h2 { font-size:1rem; font-weight:650; letter-spacing:-.025em; }
+      .panel-header { margin-bottom:20px; }
+      .hint { font-size:.77rem; line-height:1.55; }
+      .overview-grid { gap:24px; }
+      .allocation-list { gap:18px; margin-top:24px; }
+      .allocation-item { grid-template-columns:minmax(90px,1fr) minmax(50px,1fr) auto; font-size:.8rem; gap:16px; }
+      .allocation-track { height:4px; background:#eef0e9; }
+      .allocation-number { font-size:.75rem; color:var(--muted); }
+      .allocation-item:nth-child(2) .allocation-fill { background:#6b8a76; }
+      .allocation-item:nth-child(3) .allocation-fill { background:#8da899; }
+      .allocation-item:nth-child(n+4) .allocation-fill { background:#b4c6b9; }
+      button { font-size:.82rem; font-weight:600; padding:9px 14px; }
+      .secondary-button:hover:not(:disabled), .toggle-button:hover:not(:disabled), .modal__close:hover:not(:disabled) { background:var(--accent-soft); color:var(--accent); border-color:#ceddd1; }
+      .danger-button:hover:not(:disabled) { background:#fbefed; color:var(--danger); }
+      input[type="text"], input[type="password"], input[type="number"], select { border-color:var(--border); font-size:.82rem; border-radius:8px; }
+      .segmented-control { background:#f2f4ee; border:0; padding:4px; border-radius:9px; }
+      .segmented-control button { border-radius:6px; font-size:.78rem; }
+      .segmented-control button[aria-pressed="true"] { background:#fff; color:var(--text); box-shadow:0 1px 3px #23362812; }
+      .holdings-toolbar { margin:18px 0 22px; gap:14px; }
+      .table-wrapper { margin-top:0; }
+      thead { background:transparent; color:var(--muted); }
+      th { font-size:.7rem; font-weight:550; padding:15px 10px; }
+      th:first-child { text-align:left; }
+      td { padding:19px 10px; border-bottom-color:#eef0e9; font-size:.82rem; }
+      tbody tr:hover { background:#f8faf6; }
+      tbody tr:last-child td { border-bottom:0; }
+      .asset-name { background:none; color:var(--text); padding:0; min-height:0; border:0; font-size:.88rem; font-weight:700; text-align:left; border-radius:2px; }
+      .asset-name:hover:not(:disabled) { background:none; color:var(--accent); text-decoration:underline; text-underline-offset:4px; }
+      .return-value { font-size:.79rem; color:var(--muted); }
+      .return-value[data-tone="positive"] { color:var(--success); }
+      .return-value[data-tone="negative"] { color:var(--danger); }
+      .holding-value { font-weight:600; }
+      .holding-weight, .unit-price { color:#58665f; }
+      .source-label { font-size:.75rem; color:var(--muted); }
+      .toggle-button { border:0; background:transparent; color:var(--accent); font-size:.73rem; padding:4px 8px; }
+      .details-row { background:#f6f8f3; }
+      .details-row > td { padding:18px 20px; }
+      .badge { border:0; background:#f1f3ec; font-size:.7rem; padding:4px 8px; }
+      .badge[data-tone="ok"] { background:#eaf2e9; }
+      .badge[data-tone="warning"] { background:#fbf2de; }
+      .modal { background:rgba(21,35,28,.35); backdrop-filter:blur(3px); }
+      .modal__dialog { border:0; border-radius:18px; padding:28px; box-shadow:0 24px 80px #15231c26; }
+      .modal__header { margin-bottom:24px; }
+      .modal__title { letter-spacing:-.035em; font-weight:650; }
+      .modal__subtitle { font-size:.8rem; }
+      .modal__chart, .manual-note { background:#f7f9f4; }
+      .modal__raw { border-radius:10px; }
+      .login-panel { padding:36px; margin:12vh auto; }
+      .login-panel > .hint { margin:12px 0 30px; }
+      .login-panel form { gap:16px; }
+      .login-panel label { font-size:.85rem; }
+      .login-status { font-size:.8rem; line-height:1.6; }
+      @media (max-width:1000px) and (min-width:701px) {
+        .app { padding:22px; }
+        .allocation-item { grid-template-columns:1fr auto; }
+        .allocation-track { grid-column:1 / -1; grid-row:2; }
+        .filter-controls { width:100%; }
+      }
+      @media (max-width:700px) {
+        .app { padding:18px 16px 40px; }
+        .workspace { gap:18px; }
+        .app__header { flex-wrap:wrap; padding:0 0 16px; gap:16px; }
+        .app-links { gap:14px; width:100%; font-size:.78rem; }
+        .app-links #account-menu-btn { margin-left:auto; }
+        .panel { padding:22px 20px; border-radius:14px; }
+        #overview { padding:26px 22px 18px; }
+        .portfolio-value { font-size:2.7rem; }
+        .portfolio-actions { gap:8px; }
+        .snapshot-details { margin-top:22px; gap:6px; }
+        .allocation-item { grid-template-columns:1fr minmax(30px,.7fr) auto; gap:10px; }
+        .panel-header { flex-wrap:wrap; gap:12px; }
+        .filter-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .filter-controls input { grid-column:1 / -1; width:100%; }
+        .filter-controls select { width:100%; }
+        #rows-body > tr:not(.details-row) { display:grid; grid-template-columns:1fr 1fr; gap:16px 14px; padding:22px 0; }
+        #rows-body > tr:not(.details-row) > td { display:block; padding:0; text-align:left; white-space:normal; min-width:0; }
+        #rows-body > tr:not(.details-row) > td::before { display:block; font-size:.66rem; margin-bottom:5px; }
+        #rows-body > tr:not(.details-row) > td:first-child { grid-column:1 / -1; }
+        #rows-body > tr:not(.details-row) > td:first-child::before { display:none; }
+        #rows-body > tr:not(.details-row) > td:last-child { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; }
+        #rows-body > tr:not(.details-row) > td[data-label="Sources"] > span { display:inline; }
+        #rows-body > tr:not(.details-row) > td[data-label="Sources"]::before { display:none; }
+        .asset-name { font-size:1rem; }
+        .holding-value { font-size:.95rem; }
+        .details-row > td { max-width:calc(100vw - 74px); }
+        .modal__dialog { padding:22px 18px; }
+        .login-panel { padding:28px; margin:8vh auto; }
+      }
+
+      @media (max-width:700px) {
+        .table-wrapper > table .details-row > td { max-width:none; width:100%; overflow:visible; padding:10px 12px !important; }
+        .table-wrapper > table .details-row table { min-width:0; width:100%; display:block; }
+        .table-wrapper > table .details-row table thead { display:none; }
+        .table-wrapper > table .details-row table tbody { display:block; }
+        .table-wrapper > table .details-row table tbody tr { display:block; padding:12px 0; border-bottom:1px solid var(--border); }
+        .table-wrapper > table .details-row table tbody tr:last-child { border-bottom:0; }
+        .table-wrapper > table .details-row table tbody td { display:flex; justify-content:space-between; gap:14px; padding:5px 0; border:0; white-space:normal; text-align:right; font-weight:400; overflow-wrap:anywhere; }
+        .table-wrapper > table .details-row table tbody td::before { content:attr(data-label); color:var(--muted); text-align:left; flex:0 0 42%; font-size:.72rem; }
+      }
     </style>
   </head>
   <body>
@@ -252,7 +370,6 @@
             </div>
             <button type="button" class="secondary-button" id="edit-account-btn">Edit account</button>
           </div>
-          <p class="hint">Position filters include each matching asset’s full portfolio value and source breakdown. Source view filters complete source groups. Filters combine.</p>
           <div class="table-wrapper" role="region" aria-label="Portfolio holdings">
             <table><thead id="rows-head"></thead><tbody id="rows-body"><tr><td colspan="6" class="empty-state">Sign in and load a snapshot to see holdings.</td></tr></tbody></table>
           </div>
@@ -295,7 +412,7 @@
         <div class="modal__body">
           <div class="modal__alert" id="history-modal-alert">FX missing for some points.</div>
           <div class="modal__chart" id="history-modal-chart">
-            <div class="sparkline__placeholder">Select a sparkline to view a larger chart.</div>
+            <div class="sparkline__placeholder">Select an asset to view its price history.</div>
           </div>
           <div class="modal__meta">
             <div>
@@ -377,6 +494,18 @@
 
       const STORAGE_KEY = "fintracker.accountId";
       const AUTH_STORAGE_KEY = "fintracker.auth";
+      function actionIcon(paths, className = "action-icon") {
+        return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+      }
+      const brand = actionIcon('<path d="M4 18V9m5 9V5m5 13v-7m5 7V3"/>', "brand-mark");
+      document.querySelectorAll("h1").forEach((heading) => heading.insertAdjacentHTML("afterbegin", brand));
+      const actionIcons = {
+        "refresh-btn": '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-2l2 2M4 17l2 2a7 7 0 0 0 12-2"/>',
+        "account-menu-btn": '<circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2"/>',
+        "manage-holdings-btn": '<path d="M12 5v14M5 12h14"/>',
+      };
+      Object.entries(actionIcons).forEach(([id, paths]) => document.getElementById(id)?.insertAdjacentHTML("afterbegin", actionIcon(paths)));
+
       const REQUEST_TIMEOUT_MS = 30_000;
       const PERCENT_SCALE = 100;
       const CRYPTO_TABLE_COLUMN_COUNT = 6;
@@ -395,6 +524,13 @@
         "State",
       ];
       const PRICE_HISTORY_WINDOW_DAYS = 30;
+      const RETURN_TOLERANCE_DAYS = 7;
+      const RETURN_HISTORY_DAYS = 366 + RETURN_TOLERANCE_DAYS + 1;
+      const MAX_RETURN_HISTORY_DAYS = 400;
+      const HISTORY_CONCURRENCY = 4;
+      const DAY_MS = 86_400_000;
+      const COMPARABLE_PRICE_TOLERANCE = 0.000001;
+      let metricsGeneration = 0;
       const SPARKLINE_WIDTH = 120;
       const SPARKLINE_HEIGHT = 36;
       const DETAIL_CHART_WIDTH = 760;
@@ -515,7 +651,7 @@
         dom.okPositions.textContent = "—";
         dom.typeAllocations.replaceChildren();
         dom.sourceAllocations.replaceChildren();
-        dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">Sign in and load a snapshot to see holdings.</td></tr>';
+        dom.rowsBody.innerHTML = '<tr><td colspan="7" class="empty-state">Sign in and load a snapshot to see holdings.</td></tr>';
         closeHistoryModal();
         dom.accountModal.classList.add("is-hidden");
         dom.manualModal.classList.add("is-hidden");
@@ -658,8 +794,8 @@
         dom.valuationsTitle.textContent = mode === "source" ? "Holdings by source" : "Holdings";
         const columns = mode === "source"
           ? [["Source", "source"], [`Value (${currencyLabel})`, "value"], ["Weight", "weight"]]
-          : [["Asset", "asset"], ["Price trend · 30 days", "trend"], [`Value (${currencyLabel})`, "value"], ["Weight", "weight"], ["Sources", "sources"]];
-        dom.rowsHead.innerHTML = `<tr>${columns.map(([label, key]) => key === "trend" || key === "sources" ? `<th>${label}</th>` : `<th class="numeric" aria-sort="${sortState.key === key ? (sortState.direction === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort-button" data-sort-key="${key}">${label}${sortState.key === key ? (sortState.direction === "asc" ? " ↑" : " ↓") : ""}</button></th>`).join("")}</tr>`;
+          : [["Asset", "asset"], [`Price (${currencyLabel})`, "price"], ["30 days", "month"], ["1 year", "year"], [`Value (${currencyLabel})`, "value"], ["Weight", "weight"], ["Sources", "sources"]];
+        dom.rowsHead.innerHTML = `<tr>${columns.map(([label, key]) => ["price", "month", "year", "sources"].includes(key) ? `<th class="${key === "sources" ? "" : "numeric"}">${label}</th>` : `<th class="numeric" aria-sort="${sortState.key === key ? (sortState.direction === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort-button" data-sort-key="${key}">${label}${sortState.key === key ? (sortState.direction === "asc" ? " ↑" : " ↓") : ""}</button></th>`).join("")}</tr>`;
         syncSortSelect();
       }
 
@@ -986,44 +1122,94 @@
         return fetchPromise;
       }
 
-      async function renderSparklines(baseCurrency) {
-        if (!ensureAuthenticated()) return;
-        const elements = Array.from(dom.rowsBody.querySelectorAll(".sparkline[data-sparkline-symbol]"));
-        if (!elements.length) return;
-        const jobs = elements.map(async (el) => {
-          const symbol = el.dataset.sparklineSymbol;
-          if (!symbol) return;
-          renderSparklinePlaceholder(el, "Loading…", true);
-          try {
-            const history = await fetchPriceHistory(symbol, baseCurrency);
-            if (!history || history.missing_fx) {
-              renderSparklinePlaceholder(el, history && history.missing_fx ? "FX missing" : "No history", true);
-              return;
+      function snapshotPrice(rows) {
+        const prices = rows.map((row) => finiteValue(row.unit_price_base)).filter((price) => price !== null && price >= 0);
+        const types = new Set(rows.map((row) => {
+          const type = String(row.asset_type || "").trim().toLowerCase();
+          return type === "cedears" ? "cedear" : type;
+        }).filter(Boolean));
+        if (!prices.length || types.size > 1) return null;
+        const first = prices[0];
+        return prices.every((price) => Math.abs(price - first) <= Math.max(1, first) * COMPARABLE_PRICE_TOLERANCE) ? first : null;
+      }
+
+      function formatUnitPrice(value, currency) {
+        if (value === null) return "—";
+        return `${formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: value < 1 ? 8 : 2 })} ${currency}`;
+      }
+
+      function calendarDate(value) {
+        const text = String(value || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+        const date = new Date(`${text}T00:00:00Z`);
+        return Number.isFinite(date.getTime()) ? date : null;
+      }
+
+      function assetReturn(history, snapshot, annual) {
+        const endDate = calendarDate(snapshot);
+        if (!endDate || !Array.isArray(history?.prices)) return { reason: "Price history unavailable" };
+        const target = new Date(endDate);
+        if (annual) {
+          const month = target.getUTCMonth();
+          target.setUTCFullYear(target.getUTCFullYear() - 1);
+          if (target.getUTCMonth() !== month) target.setUTCDate(0);
+        } else target.setUTCDate(target.getUTCDate() - PRICE_HISTORY_WINDOW_DAYS);
+        const adjusted = hasPriceAdjustments(history);
+        const points = history.prices.map((point) => ({
+          date: calendarDate(point.asof_dt || point.asof_ts),
+          value: finiteValue(adjusted ? point.price_base_adjusted : (point.price_base_raw ?? point.price_base)),
+          point,
+        })).filter((point) => point.date).sort((a, b) => b.date - a.date);
+        const select = (date) => points.find((point) => point.date <= date);
+        const end = select(endDate), baseline = select(target);
+        if (!end || !baseline || endDate - end.date > RETURN_TOLERANCE_DAYS * DAY_MS || target - baseline.date > RETURN_TOLERANCE_DAYS * DAY_MS) return { reason: "Insufficient history for this period" };
+        if (end.value === null || baseline.value === null) return { reason: "Comparable price or currency conversion unavailable" };
+        if (end.value <= 0 || baseline.value <= 0) return { reason: "A positive comparison price is unavailable" };
+        // Snapshot and historical endpoints must describe the same instrument.
+        return { value: (end.value / baseline.value - 1) * PERCENT_SCALE, end };
+      }
+
+      async function renderAssetReturns(baseCurrency, snapshot) {
+        const generation = ++metricsGeneration;
+        const session = requestGeneration;
+        const token = authState.token;
+        const elements = Array.from(dom.rowsBody.querySelectorAll("[data-return-symbol]"));
+        const snapshotDate = calendarDate(snapshot);
+        const ageDays = snapshotDate ? Math.max(0, Math.ceil((Date.now() - snapshotDate) / DAY_MS)) : 0;
+        const windowDays = Math.min(MAX_RETURN_HISTORY_DAYS, RETURN_HISTORY_DAYS + ageDays);
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(HISTORY_CONCURRENCY, elements.length) }, async () => {
+          while (next < elements.length) {
+            const element = elements[next++];
+            const sibling = element.nextElementSibling;
+            try {
+              const history = await fetchPriceHistory(element.dataset.returnSymbol, baseCurrency, windowDays);
+              if (generation !== metricsGeneration || session !== requestGeneration || token !== authState.token || !element.isConnected) return;
+              [element, sibling].forEach((cell, index) => {
+                const result = assetReturn(history, snapshot, index === 1);
+                const snapshotUnit = finiteValue(element.dataset.snapshotPrice);
+                const endpointRaw = result.end ? finiteValue(result.end.point.price_base_raw ?? result.end.point.price_base) : null;
+                const compatible = snapshotUnit !== null && endpointRaw !== null && Math.abs(endpointRaw - snapshotUnit) <= Math.max(1, snapshotUnit) * COMPARABLE_PRICE_TOLERANCE;
+                if (result.value !== undefined && compatible && Number.isFinite(result.value)) {
+                  cell.textContent = `${result.value >= 0 ? "+" : ""}${formatPercent(result.value)}`;
+                  cell.dataset.tone = result.value >= 0 ? "positive" : "negative";
+                  cell.title = "Unit price change in snapshot currency; adjusted for known corporate actions";
+                } else {
+                  cell.textContent = "—";
+                  cell.title = result.reason || "Snapshot and historical prices cannot be compared reliably";
+                }
+                cell.setAttribute("aria-label", `${index ? "1 year" : "30 days"}: ${cell.textContent}. ${cell.title}`);
+              });
+            } catch (_) {
+              if (generation !== metricsGeneration || session !== requestGeneration || token !== authState.token || !element.isConnected) return;
+              [element, sibling].forEach((cell) => { cell.textContent = "—"; cell.title = "Price history request failed"; cell.setAttribute("aria-label", cell.title); });
             }
-            const series = valuesForHistory(history, true, defaultSeriesMode(history)).values;
-            if (!series || series.length < 2) {
-              renderSparklinePlaceholder(el, "No history", true);
-              return;
-            }
-            const svg = buildSparkline(series);
-            if (svg) {
-              el.innerHTML = "";
-              el.appendChild(svg);
-              el.classList.add("sparkline--interactive");
-              el.title = `${history.window_days}-day price trend`;
-            } else {
-              renderSparklinePlaceholder(el, "No chart", true);
-            }
-          } catch (error) {
-            renderSparklinePlaceholder(el, "—", true);
-            el.title = error.message || "Failed to load history.";
           }
-        });
-        await Promise.allSettled(jobs);
+        }));
       }
 
       function finiteValue(value) {
-        return value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
+        return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
       }
 
       function renderAllocations(container, entries, total, currency) {
@@ -1094,6 +1280,15 @@
         });
       }
 
+      function labelDetailCells() {
+        dom.rowsBody.querySelectorAll(".details-row table").forEach((table) => {
+          const labels = Array.from(table.querySelectorAll("thead th"), (cell) => cell.textContent);
+          table.querySelectorAll("tbody tr").forEach((row) => {
+            Array.from(row.cells).forEach((cell, index) => { cell.dataset.label = labels[index] || ""; });
+          });
+        });
+      }
+
       function renderRows(rows, baseCurrency, totalPortfolioValue) {
         setValuationsHeader("position", baseCurrency);
         const total = finiteValue(totalPortfolioValue);
@@ -1116,7 +1311,7 @@
         items = sorted(items, sortState.key === "asset" ? "asset" : sortState.key === "weight" ? "weight" : "value");
         dom.rowsBody.replaceChildren();
         if (!items.length) {
-          dom.rowsBody.innerHTML = `<tr><td colspan="5" class="empty-state">${groups.size ? "No holdings match these filters." : "No positions in this snapshot."}</td></tr>`;
+          dom.rowsBody.innerHTML = `<tr><td colspan="7" class="empty-state">${groups.size ? "No holdings match these filters." : "No positions in this snapshot."}</td></tr>`;
           dom.rowsSummary.textContent = groups.size ? "No matching assets." : "0 assets · 0 snapshot rows.";
           return;
         }
@@ -1126,21 +1321,24 @@
           const tr = document.createElement("tr");
           const sourcesLabel = item.sources.length === 1 ? item.sources[0] : `${item.sources.length} sources`;
           const partial = item.rows.some((row) => valueFromRow(row) === null);
-          tr.innerHTML = `<td data-label="Asset"><div>${item.name}</div><div class="hint">${item.types.join(", ")}</div><button type="button" class="history-control secondary-button" data-sparkline-symbol="${item.name}" aria-label="Open 30-day price history for ${item.name}">Price history</button></td><td data-label="Price trend"><button type="button" class="sparkline sparkline--muted" data-sparkline-symbol="${item.name}" aria-label="Open 30-day price history for ${item.name}"><span class="sparkline__placeholder">Loading…</span></button></td><td class="numeric" data-label="Value">${item.value === null ? "Unavailable" : `${formatCurrency(item.value, baseCurrency)}${partial ? " · incomplete" : ""}`}</td><td class="numeric" data-label="Weight">${item.share === null ? "Unavailable" : formatPercent(item.share)}</td><td data-label="Sources"><span>${sourcesLabel}</span> <button type="button" class="toggle-button" data-toggle-details="${id}" data-label-collapsed="Show source details for ${item.name}" data-label-expanded="Hide source details for ${item.name}" aria-expanded="false" aria-controls="${id}" aria-label="Show source details for ${item.name}">Details</button></td>`;
+          const price = snapshotPrice(item.rows);
+          tr.innerHTML = `<td data-label="Asset"><button type="button" class="asset-name" data-sparkline-symbol="${item.name}" aria-label="Open price history for ${item.name}">${item.name}</button><div class="hint">${item.types.join(", ")}</div></td><td class="numeric unit-price" data-label="Price" title="${price === null ? "A consistent snapshot unit price is unavailable" : "Available unit price at the snapshot date; source details show missing prices"}">${formatUnitPrice(price, baseCurrency)}</td><td class="numeric return-value" data-label="30 days" data-return-symbol="${item.name}" data-snapshot-price="${price === null ? "" : price}" aria-label="30-day change loading">…</td><td class="numeric return-value" data-label="1 year" aria-label="Annual change loading">…</td><td class="numeric holding-value" data-label="Value">${item.value === null ? "Unavailable" : `${formatCurrency(item.value, baseCurrency)}${partial ? " · incomplete" : ""}`}</td><td class="numeric holding-weight" data-label="Weight">${item.share === null ? "Unavailable" : formatPercent(item.share)}</td><td data-label="Sources"><span class="source-label">${sourcesLabel}</span> <button type="button" class="toggle-button" data-toggle-details="${id}" data-label-collapsed="Show source details for ${item.name}" data-label-expanded="Hide source details for ${item.name}" aria-expanded="false" aria-controls="${id}" aria-label="Show source details for ${item.name}">Details</button></td>`;
           frag.appendChild(tr);
           const details = document.createElement("tr"); details.id = id; details.className = "details-row is-hidden";
-          const cell = document.createElement("td"); cell.colSpan = 5;
+          const cell = document.createElement("td"); cell.colSpan = 7;
           cell.innerHTML = `<table><thead><tr><th>Source</th><th>Asset type</th><th>Quantity</th><th>Unit price (${baseCurrency || "base"})</th><th>Value (${baseCurrency || "base"})</th><th>Status</th></tr></thead><tbody>${item.rows.map((row) => `<tr><td>${sourceDisplayName(row.source)}</td><td>${row.asset_type || "Unknown"}</td><td class="numeric">${formatNumber(row.quantity, { maximumFractionDigits: 8 })}</td><td class="numeric">${formatCurrency(row.unit_price_base, baseCurrency)}</td><td class="numeric">${formatCurrency(valueFromRow(row), baseCurrency)}</td><td>${row.status ? `<span class="badge" data-tone="${row.status === "ok" ? "ok" : "warning"}">${row.status}</span>` : "—"}</td></tr>`).join("")}</tbody></table>`;
           details.appendChild(cell); frag.appendChild(details);
         });
         dom.rowsBody.appendChild(frag);
+        labelDetailCells();
         const matches = items.reduce((count, item) => count + item.rows.length, 0);
         const subtotal = items.map((item) => item.value).filter((value) => value !== null).reduce((sum, value) => sum + value, 0);
         dom.rowsSummary.textContent = `${items.length} matching assets · ${matches} snapshot rows · known subtotal ${formatCurrency(subtotal, baseCurrency)}. Weights use the full portfolio total.`;
-        renderSparklines(baseCurrency);
+        renderAssetReturns(baseCurrency, latestValuationPayload?.snapshot_dt);
       }
 
       function renderSourceRows(payload, baseCurrency) {
+        metricsGeneration += 1;
         setValuationsHeader("source", baseCurrency);
         const allocations = Array.isArray(payload.source_allocations) ? payload.source_allocations : [];
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -1168,6 +1366,7 @@
           details.appendChild(cell); frag.appendChild(details);
         });
         dom.rowsBody.appendChild(frag);
+        labelDetailCells();
         dom.rowsSummary.textContent = `${items.length} matching source groups. Weights use the full portfolio total.`;
       }
 
@@ -1631,7 +1830,7 @@
         dom.okPositions.textContent = "—";
         dom.typeAllocations.replaceChildren();
         dom.sourceAllocations.replaceChildren();
-        dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading account snapshot…</td></tr>';
+        dom.rowsBody.innerHTML = '<tr><td colspan="7" class="empty-state">Loading account snapshot…</td></tr>';
         dom.rowsSummary.textContent = "Loading snapshot.";
         priceHistoryCache.clear();
       }
@@ -1703,7 +1902,7 @@
           setStatus("Error", "error");
           if (!latestValuationPayload || latestValuationPayload.account_id !== normalizedAccount) {
             latestValuationPayload = null;
-            dom.rowsBody.innerHTML = '<tr><td colspan="5" class="empty-state">No snapshot is available for this account.</td></tr>';
+            dom.rowsBody.innerHTML = '<tr><td colspan="7" class="empty-state">No snapshot is available for this account.</td></tr>';
             dom.rowsSummary.textContent = "Snapshot unavailable.";
           } else {
             setFeedback(`Refresh failed. Showing the snapshot from ${formatDate(latestValuationPayload.snapshot_dt)}. ${error.message || "Try again."}`, "error");
