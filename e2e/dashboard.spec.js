@@ -21,7 +21,12 @@ test('login, inspect portfolio, and persist shared manual crypto edits', async (
   await expect(page.locator('#source-allocations')).toContainText('Binance');
   await expect(page.locator('#rows-summary')).toContainText('Weights use the full portfolio total');
   if (await page.evaluate(() => window.innerWidth) < 500) {
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth));
+    const originalViewport = page.viewportSize();
+    const phoneWidths = [320, 360, originalViewport.width];
+    for (const width of phoneWidths) {
+      await page.setViewportSize({ ...originalViewport, width });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
   }
 
   await page.locator('#holdings-search').fill('GGAL');
@@ -48,6 +53,9 @@ test('login, inspect portfolio, and persist shared manual crypto edits', async (
   await page.getByRole('button', { name: /Show source details for BTC/ }).click();
   await expect(page.locator('#rows-body')).toContainText('Exodus');
   await expect(page.locator('#rows-body')).toContainText('0.225');
+  if (await page.evaluate(() => window.innerWidth) < 500) {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize().width);
+  }
 
   await page.getByRole('button', { name: 'Manage holdings' }).click();
   await expect(page.locator('#manual-modal')).toBeVisible();

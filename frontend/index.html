@@ -265,17 +265,22 @@
       @media (max-width:700px) {
         .app { padding:18px 16px 40px; }
         .workspace { gap:18px; }
+        .workspace, .workspace .panel, .portfolio-summary > div { min-width:0; }
+        .overview-grid, .portfolio-summary { grid-template-columns:minmax(0,1fr); }
         .app__header { flex-wrap:wrap; padding:0 0 16px; gap:16px; }
         .app-links { gap:14px; width:100%; font-size:.78rem; }
         .app-links #account-menu-btn { margin-left:auto; }
         .panel { padding:22px 20px; border-radius:14px; }
         #overview { padding:26px 22px 18px; }
-        .portfolio-value { font-size:2.7rem; }
+        .portfolio-value { font-size:2.7rem; overflow-wrap:anywhere; }
+        .snapshot-details > span { overflow-wrap:anywhere; min-width:0; }
         .portfolio-actions { gap:8px; }
         .snapshot-details { margin-top:22px; gap:6px; }
-        .allocation-item { grid-template-columns:1fr minmax(30px,.7fr) auto; gap:10px; }
+        .allocation-item { grid-template-columns:minmax(0,1fr) minmax(0,auto); gap:10px; }
+        .allocation-number { white-space:normal; overflow-wrap:anywhere; }
+        .allocation-track { grid-column:1 / -1; grid-row:2; }
         .panel-header { flex-wrap:wrap; gap:12px; }
-        .filter-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .filter-controls { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
         .filter-controls input { grid-column:1 / -1; width:100%; }
         .filter-controls select { width:100%; }
         #rows-body > tr:not(.details-row) { display:grid; grid-template-columns:1fr 1fr; gap:16px 14px; padding:22px 0; }
