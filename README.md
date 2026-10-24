@@ -123,7 +123,7 @@ Backend tests live under `backend/tests/`. Run the suite in Docker so local runs
 scripts/run_tests_docker.sh
 ```
 
-This builds a dedicated test image from `backend/` and excludes the repository `.env` file. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
+This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
 
 Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 
