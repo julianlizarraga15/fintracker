@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.isolation-bootstrap
 .envrc
 .venv
 env/
