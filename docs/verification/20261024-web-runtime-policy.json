@@ -1,0 +1,130 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Deny",
+      "Action": "sts:AssumeRole",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DescribeAssociation",
+        "ssm:GetDeployablePatchSnapshotForInstance",
+        "ssm:GetDocument",
+        "ssm:DescribeDocument",
+        "ssm:GetManifest",
+        "ssm:ListAssociations",
+        "ssm:ListInstanceAssociations",
+        "ssm:PutInventory",
+        "ssm:PutComplianceItems",
+        "ssm:PutConfigurePackageResult",
+        "ssm:UpdateAssociationStatus",
+        "ssm:UpdateInstanceAssociationStatus",
+        "ssm:UpdateInstanceInformation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssmmessages:CreateControlChannel",
+        "ssmmessages:CreateDataChannel",
+        "ssmmessages:OpenControlChannel",
+        "ssmmessages:OpenDataChannel"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2messages:AcknowledgeMessage",
+        "ec2messages:DeleteMessage",
+        "ec2messages:FailMessage",
+        "ec2messages:GetEndpoint",
+        "ec2messages:GetMessages",
+        "ec2messages:SendReply"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchCheckLayerAvailability"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:875551125619:repository/fintracker-backend",
+        "arn:aws:ecr:us-east-1:875551125619:repository/fintracker-frontend"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "ssm:GetParameters",
+      "Resource": [
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ACCOUNT_EMAIL",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/SNAPSHOTS_LOCAL_DIR",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/SNAPSHOTS_S3_BUCKET",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/SNAPSHOTS_S3_PREFIX",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/JOB_RUNS_LOCAL_DIR",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/VALUATIONS_BASE_CURRENCY",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/SANTANDER_HOLDINGS_FILE",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/CRYPTO_HOLDINGS_FILE",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_IOL",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/IOL_SOURCE_LAMBDA",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_PPI",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/PPI_SOURCE_LAMBDA",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/BROKER_LAMBDA_REGION",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_BINANCE",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/BINANCE_BALANCE_LAMBDA",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/BINANCE_BASE_URL",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ETHERSCAN_API_KEY",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ETHEREUM_WALLET_ADDRESSES",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ETHEREUM_TOKEN_CONTRACTS",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_ETHEREUM",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/EXODUS_ETH_ADDRESSES",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/EXODUS_BTC_ADDRESSES",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_EXODUS",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/METAMASK_BTC_ADDRESSES",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/ENABLE_METAMASK_BTC",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/BLOCKCYPHER_API_KEY",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/JWT_SECRET",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/DEMO_AUTH_USERNAME",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/DEMO_AUTH_PASSWORD",
+        "arn:aws:ssm:us-east-1:875551125619:parameter/fintracker/web/JWT_EXPIRES_MINUTES"
+      ]
+    },
+    {
+      "Sid": "ApprovedBrokerReaders",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": [
+        "arn:aws:lambda:us-east-1:875551125619:function:fintracker-fetch-iol-data",
+        "arn:aws:lambda:us-east-1:875551125619:function:fintracker-fetch-ppi-data",
+        "arn:aws:lambda:sa-east-1:875551125619:function:fintracker-fetch-binance-balance"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:AbortMultipartUpload"
+      ],
+      "Resource": "arn:aws:s3:::fintracker-snapshots/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::fintracker-snapshots"
+    }
+  ]
+}

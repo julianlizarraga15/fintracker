@@ -1,6 +1,11 @@
 # Deploy isolated broker readers
 
-Use this runbook after the worker and web tests pass. Run commands from a checkout of the reviewed commit; use that checkout in CloudShell for the AWS steps. The source functions are deployed, but the web cutover remains pending as of the latest recorded checkpoint. Recheck live state before acting. These instructions alone do not establish that production IAM is isolated.
+**Production cutover completed 2026-10-24.** This document is now an operational and rollback reference, not an instruction to repeat the initial migration. Live evidence is in [PROJECT_STATUS.md](../PROJECT_STATUS.md) and [the sanitized cutover summary](verification/20261024-broker-cutover.json). Keep web CI/CD disabled. Do not read `.env` contents or restore broker credentials to the web host.
+
+For any later backend recreation, use only the tracked `docker-compose.isolated.yml` and host `.isolation-bootstrap`, with explicit `--env-file`, project and file arguments. The bootstrap contains nonsecret settings including `SSM_ENV_PATH=/fintracker/web`, both AWS region variables, `PYTHON_DOTENV_DISABLED=1`, and the reviewed backend image tag. The regular Compose file is not used for this service. Never run `docker compose down`, remove orphans, or recreate the unrelated frontend, proxy, or watering services as part of backend rollback.
+
+
+The procedures below document the initial migration and are retained for audit context. Production is already cut over; consult the verified operation and rollback sections at the end before making any change. These procedures alone do not establish current live state.
 
 Run AWS commands with your deployment identity in `us-east-1`, never with `fintracker-ec2-role`. Keep that role unable to deploy or inspect IAM. The existing Binance reader remains in `sa-east-1`.
 
@@ -163,4 +168,22 @@ Keep the last working image digest and function configuration. To reverse a bad 
 
 After IAM removal, do not deploy a web version that requires direct broker credentials. Keep the prior good snapshots and temporarily disable only the affected source if needed. Do not run a partial valuation that overwrites a good snapshot without reviewing the established missing-source behavior. Restore worker operation, then rerun Refresh and the scheduled path.
 
-A complete isolation verdict still requires the live effective IAM review, source and log checks, credential cleanup, initialized-process verification, and review of the existing Binance function. The template alone cannot provide that verdict.
+A template or this historical procedure alone cannot establish current isolation. The completed live review and cutover evidence are linked at the top; recheck current state before future production mutations.
+
+
+## Verified production operation
+
+The deployed EC2 role has zero attached managed policies and six reviewed inline policies; see [the exact applied policy](verification/20261024-web-runtime-policy.json) and [simulation summary](verification/20261024-web-iam-checks.json). Lambda quota is 1000 with one reserved slot per IOL/PPI reader. The backend uses `/fintracker/web`, disables dotenv, and has no broker credential in initialized settings. Old IOL/PPI parameter copies and history were deleted after successful equivalence checks; worker parameter copies remain.
+
+A backend recreation must use a bounded operation such as:
+
+```bash
+cd /home/ec2-user/fintracker
+docker-compose --env-file /home/ec2-user/fintracker/.isolation-bootstrap \
+  -p fintracker -f /home/ec2-user/fintracker/docker-compose.isolated.yml \
+  up -d --no-deps --force-recreate backend
+```
+
+The bootstrap is nonsecret, mode `0600`, and must contain the reviewed image reference plus `/fintracker/web`, region and dotenv settings. Do not let Compose discover the legacy `.env`. Before manual backend recreation, pause and drain scheduled valuations; afterward verify the new container identity and image, initialized settings, authenticated public Refresh, then restore the timer. If nginx has cached the previous backend IP, run `nginx -t` and reload the existing proxy after the backend replacement. Do not recreate other containers.
+
+Rollback only to the reviewed worker image or safe published worker versions recorded in the cutover artifact. The backend invokes unqualified reader ARNs; publishing a version alone does not switch its route. Keep last complete snapshots and never put legacy broker credentials back into EC2. ECR basic scan coverage is limited to its documented scan scope and does not prove Python dependency coverage.

@@ -10,7 +10,14 @@
   "os_release": "2023.12.20261021",
   "smoke_check": "passed",
   "workflow_result": "success",
-  "deployed": false,
+  "deployed": true,
   "coverage": "ECR basic image scan; Python dependency vulnerability coverage not established",
-  "previous_deployed_digest_for_rollback": "sha256:4519969d80ca9ed5fd853939ef667d4353b3ddf334d7cefe29b5bb69033faade"
+  "previous_deployed_digest_for_rollback": "sha256:4519969d80ca9ed5fd853939ef667d4353b3ddf334d7cefe29b5bb69033faade",
+  "deployed_at": "2026-10-24",
+  "deployment_stack": "fintracker-broker-sources",
+  "deployment_result": "UPDATE_COMPLETE; IOL and PPI use this digest",
+  "safe_rollback_versions": {
+    "iol": 1,
+    "ppi": 1
+  }
 }

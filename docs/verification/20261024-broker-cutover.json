@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-24",
+  "result": "complete",
+  "web_ci_cd": "disabled_manually",
+  "backend": {
+    "image_source_commit": "070cbf5",
+    "image_id": "sha256:99979f8cbb83c1efae0358e3230315fb8475fc362090401651d12446db2899b6",
+    "ssm_path": "/fintracker/web",
+    "dotenv_disabled": true,
+    "broker_credentials_in_initialized_web_settings": false,
+    "static_aws_credentials_in_startup_environment": false,
+    "only_persistent_mount": "application data",
+    "public_authenticated_refresh_after_legacy_cleanup": {
+      "success": true,
+      "errors": 0,
+      "output_categories": 4,
+      "s3_upload": true,
+      "run_id": "2026-10-24_175447"
+    },
+    "scheduled_systemd_valuation": {
+      "success": true,
+      "exit_status": 0,
+      "run_id": "2026-10-24_174018"
+    },
+    "timer": {
+      "active": true,
+      "enabled": true,
+      "next_run_utc": "2026-10-25T16:00:00Z"
+    }
+  },
+  "workers": {
+    "image_digest": "sha256:ab9bdf00f06e9d1e06dceed3acad7aa3fdd280b8cf84d1e539d2f0aee4e3e21b",
+    "ecr_basic_scan": {
+      "status": "COMPLETE",
+      "findings": 0,
+      "python_dependency_coverage_established": false
+    },
+    "lambda_stack": "UPDATE_COMPLETE",
+    "account_concurrency_quota": 1000,
+    "reserved_concurrency_per_reader": 1,
+    "post_quota_real_reads": {
+      "iol": {
+        "success": true,
+        "positions": 7,
+        "prices": 7,
+        "system_logs_only": true
+      },
+      "ppi": {
+        "success": true,
+        "positions": 10,
+        "prices": 10,
+        "system_logs_only": true
+      }
+    },
+    "binance": {
+      "read_only_guard_verified": true,
+      "balances_match_legacy": true,
+      "api_read_restrictions": {
+        "trading": false,
+        "withdrawals": false,
+        "futures": false,
+        "transfers": false
+      },
+      "safe_rollback_version": 2
+    }
+  },
+  "web_iam": {
+    "attached_managed_policies": 0,
+    "inline_policies": 6,
+    "wildcard_parameter_policy_removed": true,
+    "broad_ssm_read_policy_removed": true,
+    "exact_web_parameter_read_allowlist": true,
+    "exactly_three_reader_invokes": true,
+    "reader_mutation_and_role_assumption_denied": true,
+    "access_analyzer_findings": 0,
+    "resource_specific_simulation_cases": 25,
+    "resource_specific_simulation_evaluations": 503,
+    "simulation_failures": 0
+  },
+  "legacy_cleanup": {
+    "old_iol_ppi_parameters_and_history_deleted": true,
+    "replacement_verified_before_deletion": true,
+    "worker_parameters_preserved": true,
+    "old_host_env_replaced_without_reading": true,
+    "credential_rotation_performed": false
+  },
+  "data_preservation": {
+    "position_keys_and_quantities_match": true,
+    "broker_valuation_fields_match": true,
+    "manual_holdings_preserved": true,
+    "manual_update_readback_passed": true,
+    "history_preserved": true,
+    "price_history_readable": true,
+    "snapshots_preserved": true,
+    "existing_unpriced_binance_balances": 3,
+    "new_job_errors": 0
+  },
+  "verification": {
+    "backend_tests_passed": 113,
+    "existing_warnings": 9,
+    "github_actions_run": "40118168893",
+    "independent_image_and_iam_review": true
+  },
+  "rollback": {
+    "old_worker_image_retained": true,
+    "safe_worker_versions": {
+      "iol": 1,
+      "ppi": 1,
+      "binance": 2
+    },
+    "web_credentials_must_not_be_restored": true
+  },
+  "caveats": [
+    "ECR basic scan does not cover Python dependency vulnerabilities.",
+    "Three Binance balances had no prices before cutover and remain unchanged.",
+    "No credential rotation was performed; no theft evidence was established."
+  ]
+}

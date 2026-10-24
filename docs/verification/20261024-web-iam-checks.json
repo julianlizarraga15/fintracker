@@ -1,0 +1,11 @@
+{
+  "identity": "fintracker-ec2-role",
+  "simulation_cases": 25,
+  "resource_specific_evaluations": 503,
+  "passed": 25,
+  "failed": 0,
+  "scope": "Applied identity policy simulation against actual parameter, function, role, ECR repository, CloudFormation stack, EC2 instance, SSM document, log stream and S3 resource types. Resource policy, role trust, Access Analyzer, and non-IAM route reviews are summarized in the cutover record.",
+  "limitations": [
+    "IAM simulation does not prove all service behavior, SCP effects, or alternate credential paths."
+  ]
+}

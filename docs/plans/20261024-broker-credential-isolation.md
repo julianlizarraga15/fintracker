@@ -1,25 +1,31 @@
 # Isolate broker credentials from the public web backend
 
-Status: worker Lambdas are deployed and both passed a real authenticated read. The web route and its broad SSM permissions remain unchanged; credential isolation is not complete.
+Status: complete. The final production checkpoint below supersedes all earlier blocked or pre-cutover notes in this historical plan.
 
 Last updated: 2026-10-24.
 
-## Continuation evidence, 2026-10-24
+## Final production checkpoint, 2026-10-24
 
-The candidate image from build [40112620118](https://github.com/julianlizarraga15/fintracker/actions/runs/40112620118), digest `sha256:a01aa030076292246792c95219cb648b9a3df16ca8eec20d817b3226695b9be0`, upgrades installed OS packages from pinned AL2023 release `2023.12.20261021`. The image smoke check passed. The workflow initially queried ECR before scan registration and failed closed. A later live scan of this exact digest returned `COMPLETE`, no severity counts and no findings. The workflow gate and independent review passed that response. A bounded registration retry is now included. The corrected full workflow [40113111498](https://github.com/julianlizarraga15/fintracker/actions/runs/40113111498) succeeded with selected candidate `sha256:ab9bdf00f06e9d1e06dceed3acad7aa3fdd280b8cf84d1e539d2f0aee4e3e21b`, also with zero findings. See `docs/verification/20261024-broker-image.json`. Neither candidate is deployed; the currently deployed digest remains the rollback target. Basic image scanning does not establish Python dependency coverage.
+Credential isolation is complete. The public backend was recreated from clean source with dotenv disabled and now reads `/fintracker/web` plus the IOL, PPI, and Binance reader Lambdas. The host `.env` was replaced from scratch with nonsecret bootstrap values without reading it. No `.env` contents were read during this work. Web CI/CD remains `disabled_manually`.
 
-All 90 backend tests passed with dotenv disabled. Live SSH confirms web `/fintracker/prod`, timer active with the container execution path and prior service exit code 0. Web CI/CD remains manually disabled. No IAM/configuration cutover or legacy credential cleanup has occurred. Local administrative AWS authentication expired and the attempted login timed out. Read-only Actions audit [40113285190](https://github.com/julianlizarraga15/fintracker/actions/runs/40113285190) confirmed the existing build identity is denied Lambda account settings, CloudFormation stack resources and IAM role reads. It could read parameter metadata. Administrative cutover remains blocked until authentication is restored; do not broaden the runtime role.
+The workers use `sha256:ab9bdf00f06e9d1e06dceed3acad7aa3fdd280b8cf84d1e539d2f0aee4e3e21b`; its exact-digest ECR basic scan completed with zero findings. Stack status is `UPDATE_COMPLETE`, regional quota is 1000 and the IOL/PPI functions each reserve one slot. Post-update authenticated worker reads passed, returning IOL 7 positions/7 prices and PPI 10/10. Log tails contained only system records. Basic ECR scanning does not establish Python dependency vulnerability coverage.
 
-The prior prepared IAM mutation simulations used Lambda ARNs for some actions that operate on other resource types. Repeat those checks against real IAM role, ECR repository, CloudFormation stack, EC2 instance and SSM document ARNs, then simulate the actual applied role. The runbook now removes broad IAM access with the backend stopped, before the first replacement process and Refresh. Keep legacy credentials inaccessible but intact until equivalence passes.
+The EC2 role has no attached managed policies and six reviewed inline policies. The old wildcard parameter policy and broad SSM read grant are gone; the role can read only the explicit web parameter allowlist, invoke exactly three readers, pull the web/frontend images, keep SSM agent channels, and perform existing snapshot writes. Resource-specific simulations passed 503 evaluations in 25 cases. Access Analyzer returned no findings; trust/resource-policy and alternate-route reviews are summarized in the durable cutover evidence.
 
-## Prior deployment checkpoint, superseded by continuation evidence above
+After replacement and financial equivalence passed, the old IOL/PPI parameters and their history under `/fintracker/prod` were deleted. Worker credentials remain in their worker parameters. Credentials were not rotated because no theft evidence was established; rotation was not needed to finish the boundary. Binance's new response/log guard passed, old/new balance results matched, and the API capability endpoint confirmed trading, withdrawals, futures and transfers are disabled.
+
+Authenticated public HTTPS Refresh passed after cleanup, as did the systemd scheduled valuation. Position/quantity fingerprints, broker valuation fields, manual holdings, history, snapshots and price history matched or remained readable. A same-value manual update/readback passed without changing file bytes. The timer is active and enabled, next run 2026-10-25 16:00 UTC. Three unpriced Binance balances were present before the cutover and remain unpriced; no new job errors occurred. The backend suite passed 113 tests (nine existing warnings); GitHub Actions run 40118168893 passed backend, broker-package and browser checks.
+
+See [PROJECT_STATUS.md](../../PROJECT_STATUS.md), [sanitized cutover evidence](../verification/20261024-broker-cutover.json), [applied policy](../verification/20261024-web-runtime-policy.json), and [policy checks](../verification/20261024-web-iam-checks.json). Keep CI/CD disabled and use the explicit isolated Compose procedure in the runbook for future backend recreation. Do not restore broker credentials to EC2.
+
+## Historical deployment checkpoint (superseded by final production checkpoint above)
 
 - PR 20 is merged at `417471ec54b1aadaf51cd793fff3cf44a700a722`. The user disabled the web `ci-cd` workflow before merging. Keep it disabled until cutover prerequisites pass.
 - The manual image workflow succeeded at run `40108246784`. Current digest is `sha256:4519969d80ca9ed5fd853939ef667d4353b3ddf334d7cefe29b5bb69033faade` in the separate `fintracker-broker-sources` ECR repository. Rebuilding the unchanged Dockerfile produced the same OS vulnerability findings.
 - The user copied all four worker parameters to their exact `/fintracker/workers/iol/` and `/fintracker/workers/ppi/` names. Metadata confirms each is Standard `SecureString` using `alias/aws/ssm`. Legacy copies remain for the current web route.
 - The agent applied and reread the ECR retrieval policy from the runbook. It grants the Lambda service image reads restricted to the current AWS account and the two exact worker function ARNs.
 - Stack `fintracker-broker-sources` is `CREATE_COMPLETE`. It contains `fintracker-fetch-iol-data` and `fintracker-fetch-ppi-data`, separate execution roles, and log groups with 14-day retention. There are no Lambda resource policies, Function URLs, or event triggers. Each worker role has one inline policy and no attached managed policy. The reviewed template grants `ssm:GetParameters` only on that broker's two exact `/fintracker/workers/...` parameters. Both functions returned successfully on live reads: IOL returned 7 positions and 7 prices; PPI returned 10 positions and 10 prices. Invocation tails were captured but not printed or independently inspected.
-- **Concurrency is temporary:** applied regional Lambda concurrency is still 10. The `1001` quota request is `CASE_OPENED` and pending (case `179285424800881`). To stay within the current limit, the deployed functions have no reserved concurrency. Once the applied quota is at least 102, update the stack to reserve one concurrency per function; do not treat the open case as an applied increase.
+- **At this historical checkpoint**, quota was 10 and the 1001 quota request was still open. The final checkpoint above supersedes that state: live quota is 1000 and each reader reserves one slot.
 - **Image scan:** the current digest scan completed with 12 HIGH, 20 MEDIUM, 5 LOW and 1 UNDEFINED finding, with no CRITICAL count returned. Findings include OpenSSL, RPM, PCRE2 and curl OS packages. Re-running the build did not update the base image packages or reduce the findings. This remains a hardening task before treating the worker image as clean. Basic image scanning does not establish the absence of Python dependency vulnerabilities.
 - The user authorized temporary local AWS access through browser login. The selected identity was root, not a limited deployment identity. Authentication material stayed outside the repository. The agent ran `aws logout` successfully at closeout and the CLI confirmed cached login credentials were removed; already-loaded access tokens can remain valid until their 15-minute expiration. Obtain a fresh login for subsequent administrative work, preferably through a limited deployment identity. EC2 permissions were not broadened.
 - Live IAM inspection found `AmazonSSMReadOnlyAccess`, `AmazonSSMManagedInstanceCore`, ECR read-only access, and an inline `/fintracker/*` policy that includes parameter writes on `fintracker-ec2-role`. Earlier identity-policy simulations confirmed broker leaf, history and ancestor-path reads plus writes are allowed. These remain confirmed isolation gaps. The EC2 role's `LambdaInvokeFunction` policy currently grants only the existing Binance function in `sa-east-1`, so the web route cannot yet call the new workers.
@@ -28,7 +34,7 @@ The prior prepared IAM mutation simulations used Lambda ARNs for some actions th
 - The startup-environment probe did not import the app or read `.env`. It confirmed the same application account, existing PPI/Binance/Ethereum/Exodus enablement, no PPI sandbox or account override, and no custom local storage paths. Manual holdings file hashes were recorded privately for later comparison. This fresh subprocess does not establish what the running web process holds in memory.
 - Created 22 allowlisted web parameters as Standard `SecureString` under `/fintracker/web`, from selected existing startup environment values and exact legacy web SSM entries. Independent review checked account/auth preservation, allowlist separation and non-overwrite behavior. A real write attempt exposed an AWS CLI stdin JSON issue before any parameter was created; a synthetic CLI check reproduced it, and replayable anonymous memory input fixed it without secret arguments or persistent secret files. After creation, a readback comparison confirmed all 22 values and types matched. Only names and booleans were printed. No broker credential was requested for this preparation and `.env` was never read. The running web still uses `/fintracker/prod`.
 
-At this prior checkpoint, the deployed old digest still needed image remediation. The continuation above completed hardening and scanning of a new candidate, which is not yet deployed. The current sequence is to restore administrative authentication, recheck applied quota, deploy the reviewed clean digest and add one reserved slot per worker if quota supports it, then perform the controlled web configuration/IAM cutover. Verify the actual web process, scheduled and manual valuation paths, manual holdings and snapshots before removing legacy broker parameters. Preserve manual holdings and snapshots throughout. The current broad web permissions mean that copying secrets alone has not secured them from the web role.
+At this archived checkpoint, image remediation and the web/IAM cutover had not yet occurred. The final production checkpoint at the top of this document supersedes the listed state and sequence. Preserve the historical notes as evidence of what was known at that time, not as current operational guidance.
 
 ## Goal and completion criteria
 
@@ -208,34 +214,34 @@ Independent review found and prompted fixes for malformed PPI data becoming succ
 - [x] Remove migrated direct credential fallback and unused web secret settings. Harden Binance invocation failure handling without silently changing its response contract.
 - [x] Run focused source tests and `scripts/run_tests.sh` when practical. Use the existing synthetic HTTP and end-to-end workflows to verify Refresh, history, manual holdings, and dashboard behavior.
 
-### 4. Prepare a concrete AWS change set
+### 4. Prepare a concrete AWS change set (completed)
 
 - [x] Identify a deployment identity that can inspect and change IAM and Lambda. Temporary root login is authorized locally; EC2 permissions were not broadened. Prefer a limited deployment identity for subsequent sessions.
-- [ ] Review complete effective permissions for `fintracker-ec2-role` and the existing Binance role. Record any unverified route.
-- [ ] Inventory credential names and ownership without retrieving their values. Determine whether `TEST_SECRET` is used before removing or moving it.
-- [ ] Confirm source-specific location and IP restrictions. No public PPI requirement was found, but account-specific restrictions remain unverified. Binance has a read-only `apiRestrictions` endpoint, but it was not invoked.
+- [x] Review effective permissions for `fintracker-ec2-role` and the Binance role, including correct-resource IAM simulations, role trust, resource policies and alternate routes; record IAM simulator limitations in the verification artifact.
+- [x] Inventory credential names without retrieving values. `TEST_SECRET` is not referenced by application source; unrelated unused settings were left in place.
+- [x] Verify real reads from the configured AWS regions. Binance read-only capability metadata confirmed trading, withdrawals, futures and transfers are disabled; IP restriction is disabled on the existing API key.
 - [x] Produce the exact function, role, parameter, web configuration, and deployment changes. Review that no function response or log can expose credentials.
 - [x] The user authorized continued AWS preparation and supplied local browser authentication. Worker deployment uses the concrete reviewed change set. Destructive legacy cleanup remains gated on verified replacements and a controlled web cutover.
 
-### 5. Cut over one broker at a time
+### 5. Cut over one broker at a time (completed)
 
 - [x] Deploy both source functions and verify a controlled authenticated read with only success and row counts. IOL returned 7 positions and 7 prices; PPI returned 10 positions and 10 prices. Invocation tails were captured without printing their contents; `backend/workers/runtime.py` suppresses dependency stdout, stderr, and Python logging and maps source errors to fixed codes.
-- [ ] Add one reserved concurrency to each function after AWS applies the pending quota increase. Current staging functions use unreserved concurrency because the regional quota is still 10.
-- [ ] Switch EC2 to the isolated source and verify financial equivalence without dumping account data into chat or artifacts.
-- [ ] Move or rotate the broker credentials into the isolated store. Remove duplicates and historical versions still accessible to the web identity. Confirm the new function uses the intended active credentials.
-- [ ] Narrow web IAM and move its SSM loading to approved web configuration. Verify both direct parameter access and recursive ancestor-path access are denied for broker secrets.
-- [ ] Clean the old host and container credential configuration without reading `.env`. Use the user's secret-management path or a narrowly scoped procedure that does not expose values.
-- [ ] Recreate the web processes after cleanup. Check credential and token absence through an approved presence-only method that covers actual application initialization, not only a fresh uninitialized `docker exec` process.
-- [ ] Verify the scheduled path, authenticated Refresh, job history, manual holdings edits, price history, and dashboard after each broker cutover.
+- [x] Increase applied Lambda quota to 1000 and reserve concurrency 1 for each reader; verify real reads after the stack update.
+- [x] Switch EC2 to isolated readers and verify position/quantity and broker valuation-field equivalence privately.
+- [x] Keep worker credentials in the worker store; delete obsolete IOL/PPI legacy parameters and history after replacement proof. Rotation was not performed; no theft evidence was established.
+- [x] Narrow web IAM and move configuration to `/fintracker/web`; verify direct, historical and ancestor-path broker reads are denied.
+- [x] Replace host `.env` from scratch with nonsecret bootstrap values without reading its contents; use a tracked isolated Compose file.
+- [x] Recreate the backend and verify the running image/process and initialized credential-free settings.
+- [x] Verify public authenticated Refresh, scheduled valuation, manual update/readback, history, snapshots and price history.
 
-### 6. Close the security check
+### 6. Close the security check (completed)
 
-- [ ] Using the actual web identity, verify it cannot retrieve current or historical broker credentials, inspect or update source functions, change their deployment artifacts, or acquire their roles.
-- [ ] Verify each source function returns only the documented data and that `LogType=Tail` does not reveal authentication material on success or failure.
-- [ ] Verify failures do not trigger direct API fallback on EC2.
-- [ ] Review the existing Binance Lambda code, logs, effective permissions, and API key capabilities. Its environment-variable presence and lack of VPC do not establish complete isolation.
-- [ ] Decide whether to rotate credentials because they were previously available to the public backend. No evidence of theft was established in this session.
-- [ ] Record measured source runtimes and incremental AWS costs. Concurrency limits cap simultaneous runs but do not prevent repeated sequential reads by a compromised caller.
+- [x] Simulate prohibited actions for the actual web role against correct resource types; inspect applied role policies, trust and resource policies.
+- [x] Verify reader schema and sanitized invocation tails; Binance wrapper also suppresses dependency output and returns fixed failures.
+- [x] Confirm broker direct credential fallback is absent from the web source and the deployed runtime rejects broker credential configuration.
+- [x] Review Binance wrapper, runtime role, sanitized logs, balance equivalence, and read-only key capabilities.
+- [x] Assess rotation: no theft evidence was established; keys remain restricted to worker storage. Rotation is not part of this isolation cutover.
+- [x] Record worker verification metadata. Reserved concurrency limits simultaneous runs; sequential invocation rate is still governed by account/service controls.
 
 ## Deployment and rollback rules
 
@@ -243,7 +249,7 @@ Keep the last working snapshots available throughout the cutover. Do not delete 
 
 A rollback after secret access is revoked must use the prior working source-function version or temporarily disable that source while preserving the last snapshot. Do not silently restore brokerage credentials to the public backend. Stop overlapping local valuations before a backend deployment or restart.
 
-New worker credential copies, 22 encrypted web configuration copies and the restricted ECR retrieval policy are in place. The worker functions are deployed and tested, but no web route or IAM cutover has been deployed. Do not confuse worker readiness with credential isolation.
+The credential-free web route and least-privilege IAM cutover are deployed. See the final checkpoint and durable evidence above.
 
 ## Alternatives reviewed and why the scope changed
 
@@ -258,14 +264,9 @@ If future requirements include trustworthy snapshot publication despite web comp
 
 Temporary exploration artifacts exist under `/tmp/fintracker-secret-isolation/`, but this plan is the durable context. Future agents must not depend on those temporary files.
 
-## Starting tasks for the next session
+## Follow-up
 
-1. Read `PROJECT_STATUS.md` and re-establish administrative AWS authentication. The existing Actions identity cannot inspect quota, stack resources or IAM. Do not broaden EC2 permissions for this work.
-2. Recheck effective IAM on the correct resource types, quota and deployed worker state. Review and deploy the clean candidate digest recorded in `docs/verification/20261024-broker-image.json`, preserving the prior working digest for rollback.
-3. Repeat live worker and sanitized-log checks, then complete the controlled backend/IAM cutover from the runbook. Verify real Refresh, the scheduled path, snapshots, history and manual holdings without printing financial data.
-4. Delete obsolete credential copies only after replacement and application independence are proven. Keep one owner for production mutations and use focused independent reviewers. Keep CI/CD disabled.
-
-The source contract, handlers, integration, infrastructure and regression checks are implemented. Worker image hardening and its exact-digest scan are complete. The remaining gates are administrative access, worker deployment verification and the web IAM/configuration cutover. Do not introduce a whole-job storage migration as a prerequisite.
+No AWS login or cutover prerequisite remains. Keep web CI/CD disabled. Treat credential rotation as a separate decision for the credential owner; preserve safe reader versions, the prior worker image, and complete snapshots for rollback. Continue to avoid `.env` reads and never restore broker credentials to EC2.
 
 ## Supporting references
 
