@@ -1,0 +1,54 @@
+name: Audit broker isolation metadata
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Read identity, quota and runtime policy metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir audit
+          aws sts get-caller-identity > audit/identity.json
+          aws lambda get-account-settings > audit/lambda-account.json
+          aws service-quotas list-requested-service-quota-change-history-by-quota \
+            --service-code lambda --quota-code L-B99A9384 > audit/lambda-quota-requests.json
+          aws cloudformation describe-stack-resources --stack-name fintracker-broker-sources \
+            > audit/stack-resources.json
+          aws iam get-role --role-name fintracker-ec2-role > audit/web-role.json
+          aws iam list-attached-role-policies --role-name fintracker-ec2-role > audit/web-attached.json
+          aws iam list-role-policies --role-name fintracker-ec2-role > audit/web-inline.json
+          while IFS= read -r policy; do
+            aws iam get-role-policy --role-name fintracker-ec2-role --policy-name "$policy" \
+              > "audit/web-inline-$policy.json"
+          done < <(jq -r '.PolicyNames[]' audit/web-inline.json)
+          while IFS= read -r policy; do
+            version=$(aws iam get-policy --policy-arn "$policy" --query Policy.DefaultVersionId --output text)
+            name="${policy##*/}"
+            aws iam get-policy-version --policy-arn "$policy" --version-id "$version" \
+              > "audit/web-managed-$name.json"
+          done < <(jq -r '.AttachedPolicies[].PolicyArn' audit/web-attached.json)
+          aws ssm describe-parameters \
+            --parameter-filters 'Key=Name,Option=BeginsWith,Values=/fintracker/' \
+            --query 'Parameters[].{Name:Name,Type:Type,KeyId:KeyId,Version:Version}' \
+            > audit/parameter-metadata.json
+          jq '{Arn,Account}' audit/identity.json
+          jq '{AccountLimit,AccountUsage}' audit/lambda-account.json
+          jq '[.RequestedQuotas[] | {Status,DesiredValue,Id}]' audit/lambda-quota-requests.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: broker-isolation-metadata
+          path: audit/

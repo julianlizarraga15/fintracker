@@ -2,6 +2,11 @@ name: Build broker Lambda image
 
 on:
   workflow_dispatch:
+    inputs:
+      audit_only:
+        description: Read deployment identity, quota and web policy metadata without building or deploying.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,7 +20,12 @@ env:
   ECR_REPOSITORY: fintracker-broker-sources
 
 jobs:
+  audit:
+    if: ${{ inputs.audit_only }}
+    uses: ./.github/workflows/broker-isolation-audit.yml
+    secrets: inherit
   build:
+    if: ${{ !inputs.audit_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
