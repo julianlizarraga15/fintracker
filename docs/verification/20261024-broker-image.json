@@ -1,0 +1,16 @@
+{
+  "build_run": "https://github.com/julianlizarraga15/fintracker/actions/runs/40113111498",
+  "commit": "1f321b1241cb22257bbe4437defb64410f273ecb",
+  "digest": "sha256:ab9bdf00f06e9d1e06dceed3acad7aa3fdd280b8cf84d1e539d2f0aee4e3e21b",
+  "scan_status": "COMPLETE",
+  "scan_completed_at": "2026-10-24T16:48:18+00:00",
+  "vulnerability_source_updated_at": "2026-10-24T16:48:18+00:00",
+  "severity_counts": {},
+  "findings_count": 0,
+  "os_release": "2023.12.20261021",
+  "smoke_check": "passed",
+  "workflow_result": "success",
+  "deployed": false,
+  "coverage": "ECR basic image scan; Python dependency vulnerability coverage not established",
+  "previous_deployed_digest_for_rollback": "sha256:4519969d80ca9ed5fd853939ef667d4353b3ddf334d7cefe29b5bb69033faade"
+}
