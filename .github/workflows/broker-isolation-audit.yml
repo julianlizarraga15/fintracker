@@ -16,17 +16,33 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-      - name: Read identity, quota and runtime policy metadata
+      - name: Read deployment identity
         shell: bash
         run: |
           set -euo pipefail
           mkdir audit
           aws sts get-caller-identity > audit/identity.json
+          jq '{Arn,Account}' audit/identity.json
+      - name: Read Lambda quota metadata
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p audit
           aws lambda get-account-settings > audit/lambda-account.json
           aws service-quotas list-requested-service-quota-change-history-by-quota \
             --service-code lambda --quota-code L-B99A9384 > audit/lambda-quota-requests.json
+      - name: Read worker stack metadata
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p audit
           aws cloudformation describe-stack-resources --stack-name fintracker-broker-sources \
             > audit/stack-resources.json
+      - name: Read web role policy metadata
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p audit
           aws iam get-role --role-name fintracker-ec2-role > audit/web-role.json
           aws iam list-attached-role-policies --role-name fintracker-ec2-role > audit/web-attached.json
           aws iam list-role-policies --role-name fintracker-ec2-role > audit/web-inline.json
@@ -40,13 +56,15 @@ jobs:
             aws iam get-policy-version --policy-arn "$policy" --version-id "$version" \
               > "audit/web-managed-$name.json"
           done < <(jq -r '.AttachedPolicies[].PolicyArn' audit/web-attached.json)
+      - name: Read parameter metadata
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p audit
           aws ssm describe-parameters \
             --parameter-filters 'Key=Name,Option=BeginsWith,Values=/fintracker/' \
             --query 'Parameters[].{Name:Name,Type:Type,KeyId:KeyId,Version:Version}' \
             > audit/parameter-metadata.json
-          jq '{Arn,Account}' audit/identity.json
-          jq '{AccountLimit,AccountUsage}' audit/lambda-account.json
-          jq '[.RequestedQuotas[] | {Status,DesiredValue,Id}]' audit/lambda-quota-requests.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
