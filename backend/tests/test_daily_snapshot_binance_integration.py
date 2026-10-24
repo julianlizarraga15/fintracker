@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from backend.core import binance_transform, daily_snapshot, iol_transform, ppi_transform
+from backend.core.sources.models import SourcePositions
 from backend.valuation.models import FXRate, Price as PriceModel
 
 
@@ -51,38 +52,25 @@ def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
 
     monkeypatch.setattr(daily_snapshot, "save_snapshot_files", fake_save_snapshot_files)
     monkeypatch.setattr(daily_snapshot, "maybe_upload_to_s3", lambda *args, **kwargs: None)
-    monkeypatch.setattr(daily_snapshot, "IOL_USERNAME", "user")
-    monkeypatch.setattr(daily_snapshot, "IOL_PASSWORD", "pass")
+    monkeypatch.setattr(daily_snapshot, "ENABLE_IOL", True)
     monkeypatch.setattr(daily_snapshot, "ENABLE_PPI", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_BINANCE", True)
     monkeypatch.setattr(daily_snapshot, "ENABLE_ETHEREUM", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_EXODUS", False)
-    monkeypatch.setattr(daily_snapshot, "BINANCE_BALANCE_LAMBDA", None)
-    monkeypatch.setattr(daily_snapshot, "BINANCE_API_KEY", "key")
-    monkeypatch.setattr(daily_snapshot, "BINANCE_API_SECRET", "secret")
+    monkeypatch.setattr(daily_snapshot, "BINANCE_BALANCE_LAMBDA", "fixed-binance-function")
     monkeypatch.setattr(daily_snapshot, "ACCOUNT_ID", "acct-1")
-    monkeypatch.setattr(iol_transform, "ACCOUNT_ID", "acct-1")
     monkeypatch.setattr(binance_transform, "ACCOUNT_ID", "acct-1")
 
-    monkeypatch.setattr(daily_snapshot, "get_bearer_tokens", lambda u, p: ("token", "refresh"))
-    monkeypatch.setattr(
-        daily_snapshot,
-        "get_positions",
-        lambda access_token: [{"simbolo": "IOL1", "cantidad": 2, "precio": 10, "_market": "ar"}],
+    iol_positions = iol_transform.extract_positions_as_df(
+        [{"simbolo": "IOL1", "cantidad": 2, "precio": 10, "moneda": "USD", "tipo": "equity", "_market": "ar"}],
+        account_id="acct-1",
     )
-    monkeypatch.setattr(daily_snapshot, "get_prices_for_positions", lambda items, token: [
-        PriceModel(
-            asof_dt=date.today(),
-            asof_ts=datetime.now(timezone.utc),
-            symbol="IOL1",
-            price_type="last",
-            price=10.0,
-            currency="USD",
-            venue="IOL",
-            source="iol",
-            quality_score=100,
-        )
-    ])
+    monkeypatch.setattr(daily_snapshot, "fetch_broker_positions", lambda source, *_args: SourcePositions(
+        df=iol_positions,
+        prices=[PriceModel(asof_dt=date.today(), asof_ts=datetime.now(timezone.utc),
+                           symbol="IOL1", price_type="last", price=10.0, currency="USD",
+                           venue="IOL", source="iol", quality_score=100)],
+    ))
     monkeypatch.setattr(daily_snapshot, "load_holdings", lambda: [])
     monkeypatch.setattr(daily_snapshot, "load_crypto_holdings", lambda: [])
     monkeypatch.setattr(daily_snapshot, "fetch_crypto_prices", lambda symbols: [])
@@ -91,8 +79,8 @@ def test_daily_snapshot_merges_and_prices_binance(monkeypatch):
 
     monkeypatch.setattr(
         daily_snapshot,
-        "get_account_balances",
-        lambda **kwargs: [
+        "_fetch_binance_balances_from_lambda",
+        lambda _function: [
             {"asset": "BTC", "free": 0.5, "locked": 0.0},
             {"asset": "USDT", "free": 20.0, "locked": 0.0},
         ],
@@ -200,18 +188,17 @@ def test_daily_snapshot_values_ppi_without_iol(monkeypatch):
 
     monkeypatch.setattr(daily_snapshot, "save_snapshot_files", fake_save_snapshot_files)
     monkeypatch.setattr(daily_snapshot, "maybe_upload_to_s3", lambda *args, **kwargs: None)
-    monkeypatch.setattr(daily_snapshot, "IOL_USERNAME", None)
-    monkeypatch.setattr(daily_snapshot, "IOL_PASSWORD", None)
+    monkeypatch.setattr(daily_snapshot, "ENABLE_IOL", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_PPI", True)
     monkeypatch.setattr(daily_snapshot, "ENABLE_BINANCE", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_ETHEREUM", False)
     monkeypatch.setattr(daily_snapshot, "ENABLE_EXODUS", False)
     monkeypatch.setattr(daily_snapshot, "ACCOUNT_ID", "acct-ppi")
-    monkeypatch.setattr(ppi_transform, "ACCOUNT_ID", "acct-ppi")
 
-    monkeypatch.setattr(daily_snapshot, "login_ppi", lambda: object())
-    monkeypatch.setattr(daily_snapshot, "resolve_ppi_account_number", lambda ppi: "123")
-    monkeypatch.setattr(daily_snapshot, "get_ppi_balance_and_positions", lambda ppi, account_number: ppi_payload)
+    monkeypatch.setattr(daily_snapshot, "fetch_broker_positions", lambda source, *_args: SourcePositions(
+        df=ppi_transform.positions_to_df(ppi_payload, account_id="acct-ppi", position_columns=daily_snapshot.POSITION_COLUMNS),
+        prices=ppi_transform.prices_from_positions(ppi_payload),
+    ))
     monkeypatch.setattr(daily_snapshot, "load_holdings", lambda: [])
     monkeypatch.setattr(daily_snapshot, "load_crypto_holdings", lambda: [])
     monkeypatch.setattr(daily_snapshot, "fetch_crypto_prices", lambda symbols: [])

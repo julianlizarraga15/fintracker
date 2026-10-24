@@ -4,12 +4,22 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  broker-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t fintracker-broker-check -f backend/Dockerfile.broker-lambda .
+      - run: bash scripts/check_broker_image.sh fintracker-broker-check
+
   backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: scripts/run_tests_docker.sh
+      - run: bash scripts/run_tests_docker.sh
 
   browser:
     runs-on: ubuntu-latest

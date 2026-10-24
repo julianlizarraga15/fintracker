@@ -7,5 +7,5 @@ IMAGE_NAME="fintracker-backend-tests"
 docker build \
   --tag "$IMAGE_NAME" \
   --file "$APP_ROOT/backend/Dockerfile.test" \
-  "$APP_ROOT/backend"
+  "$APP_ROOT"
 docker run --rm "$IMAGE_NAME"

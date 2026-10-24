@@ -5,8 +5,7 @@ import pytest
 from backend.core import ppi_transform
 
 
-def test_positions_to_df_maps_cash_and_instruments(monkeypatch):
-    monkeypatch.setattr(ppi_transform, "ACCOUNT_ID", "acct-ppi")
+def test_positions_to_df_maps_cash_and_instruments():
     payload = {
         "groupedAvailability": [
             {
@@ -34,7 +33,7 @@ def test_positions_to_df_maps_cash_and_instruments(monkeypatch):
         ],
     }
 
-    df = ppi_transform.positions_to_df(payload)
+    df = ppi_transform.positions_to_df(payload, account_id="acct-ppi")
 
     assert set(df["symbol"]) == {"CASH_ARS_INMEDIATA", "AAPL"}
     assert set(df["source"]) == {"ppi"}

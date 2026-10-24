@@ -1,0 +1,15 @@
+.git
+.venv
+node_modules
+data
+artifacts
+tls
+.aws
+.ssh
+.codex
+.env
+.env.*
+**/.env
+**/.env.*
+**/__pycache__
+**/.pytest_cache

@@ -15,23 +15,18 @@ Personal finance tracker for pulling brokerage positions, computing valuations, 
 
 ### Loading secrets from SSM Parameter Store
 
-In production, set `SSM_ENV_PATH` to an SSM path whose final path segments match the app's environment variable names:
-
-```bash
-aws ssm put-parameter \
-  --name "/fintracker/prod/JWT_SECRET" \
-  --type "SecureString" \
-  --value "replace-me"
-```
+The web backend accepts only the explicit setting names in `backend/core/settings.py` under `/fintracker/web`. Create sensitive web settings such as `/fintracker/web/JWT_SECRET` as `SecureString` in the AWS console. Keep credential values out of CLI arguments and shell history.
 
 The backend loads `.env` first for local development, then fills missing values from SSM when `SSM_ENV_PATH` is set. On EC2, `.env` should contain only non-secret bootstrapping values, for example:
 
 ```env
-SSM_ENV_PATH=/fintracker/prod
+SSM_ENV_PATH=/fintracker/web
 AWS_REGION=us-east-1
 ```
 
-The EC2 instance role needs `ssm:GetParametersByPath` for that path, plus `kms:Decrypt` if the parameters use a customer-managed KMS key.
+The EC2 instance role needs `ssm:GetParameters` for the exact approved web parameter names, plus a scoped decrypt grant if those parameters use a customer-managed KMS key. It must not have access to broker credentials. The backend refuses startup when old brokerage credentials are present in its environment.
+
+Deploy the isolated source functions and migrate configuration before deploying this backend version. Follow [the broker isolation runbook](docs/broker-credential-isolation.md); the old `/fintracker/prod` loading path is rejected.
 
 ## Getting Started
 1. **Prerequisites**
@@ -60,17 +55,21 @@ From the project directory on EC2, read the latest saved IOL positions using:
 This prints the CSV path, symbols, and instrument labels without contacting IOL or changing files. Locally, use `python3 scripts/inspect_iol_types.py`; pass `--root <snapshot-storage-directory>` to inspect another storage location.
 
 ## Binance Spot Balances
-- Enable with `.env`: set `ENABLE_BINANCE=1`, `BINANCE_API_KEY`, `BINANCE_API_SECRET` (optionally override `BINANCE_BASE_URL` or `BINANCE_RECV_WINDOW_MS`).
+- Set `ENABLE_BINANCE=1` and `BINANCE_BALANCE_LAMBDA=fintracker-fetch-binance-balance` in approved web configuration. Binance credentials stay inside the existing reader in `sa-east-1`.
 - Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
 - Only spot balances are fetched; keep keys scoped accordingly.
 
+## IOL Positions
+- Set `ENABLE_IOL=1`, `IOL_SOURCE_LAMBDA=fintracker-fetch-iol-data`, and `BROKER_LAMBDA_REGION=us-east-1` after deploying the isolated reader.
+- IOL login, both portfolio markets, and authenticated quote requests run inside Lambda. EC2 receives normalized positions and prices without bearer or refresh tokens.
+
 ## PPI Positions
-- Enable with `.env`: set `ENABLE_PPI=1`, `PPI_PUBLIC_API_KEY`, and `PPI_PRIVATE_API_KEY`; optionally set `PPI_ACCOUNT_NUMBER` if your API user has more than one account.
+- Set `ENABLE_PPI=1`, `PPI_SOURCE_LAMBDA=fintracker-fetch-ppi-data`, and `BROKER_LAMBDA_REGION=us-east-1` after deploying the isolated reader. Configure credentials and optional `PPI_ACCOUNT_NUMBER` on the worker side using [the runbook](docs/broker-credential-isolation.md).
 - Quick read-only check:
   ```bash
   .venv/bin/python scripts/fetch_ppi_positions.py
   ```
-- Daily snapshots now fetch PPI balances/positions, use prices from the PPI portfolio payload, and value ARS rows through the existing FX flow.
+- This utility and daily snapshots invoke the fixed PPI reader. ARS valuation and local snapshot storage continue through the existing FX flow.
 
 ## MetaMask / Ethereum Wallet Balances
 - Enable with `.env`: set `ENABLE_ETHEREUM=true`, `ETHERSCAN_API_KEY`, and `ETHEREUM_WALLET_ADDRESSES` (comma-separated list of 0x... addresses).
@@ -124,7 +123,7 @@ Backend tests live under `backend/tests/`. Run the suite in Docker so local runs
 scripts/run_tests_docker.sh
 ```
 
-This builds a dedicated test image from `backend/` and excludes the repository `.env` file. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
+This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
 
 Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 

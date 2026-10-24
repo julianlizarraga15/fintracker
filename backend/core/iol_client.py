@@ -11,6 +11,9 @@ BASE_URL = "https://api.invertironline.com"
 TOKEN_ENDPOINT = "/token"
 PORTFOLIO_ENDPOINTS = ["/api/v2/portafolio"]
 BLUE_DOLLAR_URL = "https://dolarapi.com/v1/dolares/blue"
+AUTH_TIMEOUT_SECONDS = 20
+PORTFOLIO_TIMEOUT_SECONDS = 20
+QUOTE_TIMEOUT_SECONDS = 15
 
 # Markets to query
 MARKET_PARAMS = [
@@ -21,16 +24,9 @@ MARKET_PARAMS = [
 LOG = logging.getLogger(__name__)
 
 
-def _safe_text(resp: requests.Response) -> str:
-    try:
-        return resp.text[:300].replace("\n", " ")
-    except Exception:
-        return "<no body>"
-
-
 def get_bearer_tokens(username: str, password: str) -> Tuple[str, str]:
     data = {"username": username, "password": password, "grant_type": "password"}
-    r = requests.post(BASE_URL + TOKEN_ENDPOINT, data=data, timeout=20)
+    r = requests.post(BASE_URL + TOKEN_ENDPOINT, data=data, timeout=AUTH_TIMEOUT_SECONDS)
     r.raise_for_status()
     j = r.json()
     return j["access_token"], j.get("refresh_token")
@@ -43,17 +39,17 @@ def get_positions(access_token: str) -> List[dict]:
     """
     headers = {"Authorization": f"Bearer {access_token}"}
     collected: List[dict] = []
-    last_err = None
+    successful_response = False
 
     for ep in PORTFOLIO_ENDPOINTS:
         url = BASE_URL + ep
         for params in MARKET_PARAMS:
             market = params.get("pais") or "desconocido"
             try:
-                r = requests.get(url, headers=headers, params=params, timeout=20)
+                r = requests.get(url, headers=headers, params=params, timeout=PORTFOLIO_TIMEOUT_SECONDS)
                 if r.status_code == 200:
                     data = r.json()
-                    items = []
+                    items = None
                     if isinstance(data, dict):
                         if isinstance(data.get("tenencias"), list):
                             items = data["tenencias"]
@@ -64,19 +60,21 @@ def get_positions(access_token: str) -> List[dict]:
                     elif isinstance(data, list):
                         items = data
 
+                    if items is None:
+                        continue
+                    successful_response = True
+
                     for it in items or []:
                         # attach market tag so we don't lose where it came from
                         if isinstance(it, dict):
                             it = dict(it)
                             it["_market"] = market
                         collected.append(it)
-                else:
-                    last_err = f"HTTP {r.status_code} at {url} params={params} body={_safe_text(r)}"
-            except requests.RequestException as e:
-                last_err = f"RequestException at {url} params={params}: {e}"
+            except (requests.RequestException, ValueError):
+                continue
 
-    if not collected:
-        raise RuntimeError("Unable to fetch positions from IOL. Last error: " + (last_err or "unknown"))
+    if not successful_response:
+        raise RuntimeError("Unable to fetch positions from IOL")
 
     return collected
 
@@ -140,9 +138,8 @@ def get_price_for_symbol(symbol: str, market: str, panel: str, access_token: str
     url = f"{BASE_URL}/api/v2/Cotizaciones/{market}/{symbol}/{panel}"
     headers = {"Authorization": f"Bearer {access_token}"}
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, headers=headers, timeout=QUOTE_TIMEOUT_SECONDS)
         if r.status_code != 200:
-            LOG.debug("IOL cotizacion miss: %s -> %s (status=%s) body=%s", market, symbol, r.status_code, _safe_text(r))
             return None
         j = r.json()
         # The response format may vary; try to find an object with price info
@@ -175,8 +172,7 @@ def get_price_for_symbol(symbol: str, market: str, panel: str, access_token: str
             quality_score=100,
         )
         return p
-    except requests.RequestException as e:
-        LOG.debug("IOL request error for %s/%s/%s: %s", market, symbol, panel, e)
+    except (requests.RequestException, ValueError):
         return None
 
 
@@ -230,7 +226,7 @@ def get_prices_for_positions(items: List[dict], access_token: str) -> List[valua
                         p = p.model_copy(update={"currency": currency_hint or "ARS"})
                     out.append(p)
         except Exception:
-            LOG.exception("unexpected error while fetching price for position: %r", it)
+            continue
 
     return out
 

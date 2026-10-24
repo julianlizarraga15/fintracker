@@ -15,7 +15,7 @@ fi
 JOB_NAME="valuations"
 RUN_STAMP="${RUN_STAMP:-$(date -u +"%Y-%m-%d_%H%M%S")}"
 STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-RUNS_ROOT="${JOB_RUNS_LOCAL_DIR:-data/job_runs}"
+RUNS_ROOT="$(python -c 'from backend.core.settings import load_settings; load_settings(); from backend.app.job_runs import JOB_RUNS_ROOT; print(JOB_RUNS_ROOT)')" || exit 1
 RUNS_DIR="${RUNS_ROOT}/${JOB_NAME}"
 LOG_FILE="${RUNS_DIR}/${RUN_STAMP}.log"
 LOCK_DIR="${RUNS_DIR}/.running.lock"

@@ -1,0 +1,9 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY backend/requirements-broker-lambda.txt /tmp/broker-requirements.txt
+RUN pip install --no-cache-dir --target "${LAMBDA_TASK_ROOT}" -r /tmp/broker-requirements.txt
+
+COPY backend ${LAMBDA_TASK_ROOT}/backend
+
+ENV PYTHONUNBUFFERED=1
+CMD ["backend.workers.iol.handler"]

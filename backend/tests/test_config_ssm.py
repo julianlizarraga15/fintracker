@@ -1,93 +1,104 @@
 from __future__ import annotations
 
-import importlib
 import sys
 import types
+import subprocess
 
+import pytest
 
-REQUIRED_ENV = {
-    "ACCOUNT_EMAIL": "test@example.com",
-    "IOL_USERNAME": "user",
-    "IOL_PASSWORD": "pass",
-}
-
-
-class FakePaginator:
-    def __init__(self, parameters=None):
-        self.parameters = parameters or [
-            {"Name": "/fintracker/test/JWT_SECRET", "Value": "from-ssm"},
-            {"Name": "/fintracker/test/DEMO_AUTH_USERNAME", "Value": "demo"},
-        ]
-
-    def paginate(self, **kwargs):
-        assert kwargs == {
-            "Path": "/fintracker/test",
-            "WithDecryption": True,
-            "Recursive": True,
-        }
-        return [{"Parameters": self.parameters}]
+from backend.core.settings import BROKER_CREDENTIAL_NAMES, WEB_SSM_NAMES, load_settings
 
 
 class FakeSsmClient:
-    def __init__(self, parameters=None):
-        self.parameters = parameters
+    def __init__(self, calls):
+        self.calls = calls
 
-    def get_paginator(self, name: str):
-        assert name == "get_parameters_by_path"
-        return FakePaginator(self.parameters)
+    def get_parameters(self, **kwargs):
+        self.calls.append(kwargs)
+        values = {"JWT_SECRET": "from-ssm", "DEMO_AUTH_USERNAME": "demo"}
+        return {"Parameters": [
+            {"Name": name, "Value": values[name.rsplit("/", 1)[-1]]}
+            for name in kwargs["Names"] if name.rsplit("/", 1)[-1] in values
+        ]}
 
 
-def install_fake_boto(monkeypatch, parameters=None):
-    class FakeBotoCoreError(Exception):
-        pass
-
-    class FakeClientError(Exception):
-        pass
-
+def install_fake_boto(monkeypatch, calls):
     fake_boto3 = types.ModuleType("boto3")
-    fake_boto3.client = lambda service_name: FakeSsmClient(parameters)
-    fake_botocore = types.ModuleType("botocore")
-    fake_botocore.__path__ = []
-    fake_botocore_exceptions = types.ModuleType("botocore.exceptions")
-    fake_botocore_exceptions.BotoCoreError = FakeBotoCoreError
-    fake_botocore_exceptions.ClientError = FakeClientError
+    fake_boto3.client = lambda service_name: FakeSsmClient(calls)
     monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
-    monkeypatch.setitem(sys.modules, "botocore", fake_botocore)
-    monkeypatch.setitem(sys.modules, "botocore.exceptions", fake_botocore_exceptions)
 
 
-def import_fresh_config():
-    sys.modules.pop("backend.core.config", None)
-    return importlib.import_module("backend.core.config")
-
-
-def prepare_required_env(monkeypatch):
-    for name, value in REQUIRED_ENV.items():
-        monkeypatch.setenv(name, value)
+def prepare_env(monkeypatch):
+    for name in BROKER_CREDENTIAL_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ACCOUNT_EMAIL", "test@example.invalid")
     monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
-    monkeypatch.setenv("SSM_ENV_PATH", "/fintracker/test")
+    monkeypatch.setenv("SSM_ENV_PATH", "/fintracker/web")
+    monkeypatch.delenv("SSM_ENV_OVERRIDE", raising=False)
 
 
-def test_config_loads_missing_values_from_ssm(monkeypatch):
-    prepare_required_env(monkeypatch)
+def test_web_loads_only_explicit_settings_without_requesting_broker_secrets(monkeypatch):
+    prepare_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "from-env")
     monkeypatch.delenv("DEMO_AUTH_USERNAME", raising=False)
-    install_fake_boto(monkeypatch)
+    calls = []
+    install_fake_boto(monkeypatch, calls)
+    settings = load_settings()
+    assert settings.JWT_SECRET == "from-env"
+    assert settings.DEMO_AUTH_USERNAME == "demo"
+    requested = {name for call in calls for name in call["Names"]}
+    assert requested == {f"/fintracker/web/{name}" for name in WEB_SSM_NAMES}
+    assert not any(name.rsplit("/", 1)[-1] in BROKER_CREDENTIAL_NAMES for name in requested)
+    assert all(call["WithDecryption"] and len(call["Names"]) <= 10 for call in calls)
 
-    config = import_fresh_config()
 
-    assert config.JWT_SECRET == "from-env"
-    assert config.DEMO_AUTH_USERNAME == "demo"
-
-
-def test_config_ssm_override_replaces_existing_values_when_truthy(monkeypatch):
-    prepare_required_env(monkeypatch)
+def test_ssm_override_replaces_web_settings(monkeypatch):
+    prepare_env(monkeypatch)
     monkeypatch.setenv("SSM_ENV_OVERRIDE", "true")
     monkeypatch.setenv("JWT_SECRET", "from-env")
-    monkeypatch.setenv("DEMO_AUTH_USERNAME", "env-demo")
-    install_fake_boto(monkeypatch)
+    install_fake_boto(monkeypatch, [])
+    assert load_settings().JWT_SECRET == "from-ssm"
 
-    config = import_fresh_config()
 
-    assert config.JWT_SECRET == "from-ssm"
-    assert config.DEMO_AUTH_USERNAME == "demo"
+def test_old_recursive_production_path_is_rejected_before_any_aws_call(monkeypatch):
+    prepare_env(monkeypatch)
+    monkeypatch.setenv("SSM_ENV_PATH", "/fintracker/prod")
+    calls = []
+    install_fake_boto(monkeypatch, calls)
+    with pytest.raises(RuntimeError, match="/fintracker/web"):
+        load_settings()
+    assert not calls
+
+
+@pytest.mark.parametrize("name", sorted(BROKER_CREDENTIAL_NAMES))
+def test_web_refuses_broker_credentials_without_echoing_their_values(monkeypatch, name):
+    prepare_env(monkeypatch)
+    monkeypatch.setenv(name, "synthetic-sensitive-credential")
+    calls = []
+    install_fake_boto(monkeypatch, calls)
+    with pytest.raises(RuntimeError) as exc:
+        load_settings()
+    assert name in str(exc.value)
+    assert "synthetic-sensitive-credential" not in str(exc.value)
+    assert not calls
+
+
+def test_http_app_initializes_ssm_paths_before_loading_file_readers(monkeypatch, tmp_path):
+    prepare_env(monkeypatch)
+    snippet = f'''
+import sys, types
+from pathlib import Path
+values = {{"SNAPSHOTS_LOCAL_DIR": {str(tmp_path / 'snapshots')!r},
+           "JOB_RUNS_LOCAL_DIR": {str(tmp_path / 'jobs')!r}}}
+class SSM:
+    def get_parameters(self, **kwargs):
+        return {{"Parameters": [{{"Name": name, "Value": values[name.rsplit("/", 1)[-1]]}}
+                for name in kwargs["Names"] if name.rsplit("/", 1)[-1] in values]}}
+sys.modules["boto3"] = types.SimpleNamespace(client=lambda service: SSM())
+import backend.app.main
+from backend.app import prices_history, job_runs
+assert prices_history.SNAPSHOTS_ROOT == Path(values["SNAPSHOTS_LOCAL_DIR"])
+assert job_runs.JOB_RUNS_ROOT == Path(values["JOB_RUNS_LOCAL_DIR"])
+'''
+    result = subprocess.run([sys.executable, "-c", snippet], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr

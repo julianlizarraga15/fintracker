@@ -10,22 +10,13 @@ from urllib.parse import urlencode
 import requests
 
 from backend.core.binance_common import BINANCE_MARKET, BINANCE_SOURCE
-from backend.core.config import (
-    BINANCE_API_KEY,
-    BINANCE_API_SECRET,
-    BINANCE_BASE_URL,
-    BINANCE_RECV_WINDOW_MS,
-    DEFAULT_BINANCE_BASE_URL,
-    DEFAULT_BINANCE_RECV_WINDOW_MS,
-)
-
 LOG = logging.getLogger(__name__)
 
 ACCOUNT_ENDPOINT = "/api/v3/account"
 TIME_ENDPOINT = "/api/v3/time"
 DEFAULT_TIMEOUT = 15
-BASE_URL = BINANCE_BASE_URL or DEFAULT_BINANCE_BASE_URL
-DEFAULT_RECV_WINDOW_MS = BINANCE_RECV_WINDOW_MS or DEFAULT_BINANCE_RECV_WINDOW_MS
+BASE_URL = "https://api.binance.com"
+DEFAULT_RECV_WINDOW_MS = 5000
 
 
 class BinanceAPIError(RuntimeError):
@@ -127,14 +118,14 @@ def get_server_time(base_url: str = BASE_URL, timeout: int = DEFAULT_TIMEOUT) ->
 
 
 def get_account_balances(
-    api_key: Optional[str] = None,
-    api_secret: Optional[str] = None,
+    api_key: str,
+    api_secret: str,
     base_url: str = BASE_URL,
     recv_window_ms: Optional[int] = DEFAULT_RECV_WINDOW_MS,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> List[Dict[str, Any]]:
-    key = api_key or BINANCE_API_KEY
-    secret = api_secret or BINANCE_API_SECRET
+    key = api_key
+    secret = api_secret
 
     def _fetch(ts_ms: Optional[int] = None) -> Any:
         return _signed_get(

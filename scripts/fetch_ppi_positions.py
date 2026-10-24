@@ -7,31 +7,15 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.core.ppi_client import (
-    get_accounts,
-    get_balance_and_positions,
-    login,
-    resolve_account_number,
-)
-from backend.core.ppi_transform import positions_to_df, prices_from_positions
-
-
-def _mask_account(value: str) -> str:
-    if len(value) <= 4:
-        return "****"
-    return f"{'*' * max(len(value) - 4, 0)}{value[-4:]}"
+from backend.core.broker_lambda import fetch_broker_positions
+from backend.core.config import ACCOUNT_ID, BROKER_LAMBDA_REGION, PPI_SOURCE_LAMBDA
 
 
 def main() -> int:
-    ppi = login()
-    accounts = get_accounts(ppi)
-    account_number = resolve_account_number(ppi)
-    payload = get_balance_and_positions(ppi, account_number)
+    result = fetch_broker_positions("ppi", PPI_SOURCE_LAMBDA, BROKER_LAMBDA_REGION, ACCOUNT_ID)
+    positions_df = result.df
+    prices = result.prices
 
-    positions_df = positions_to_df(payload)
-    prices = prices_from_positions(payload)
-
-    print(f"PPI login ok. Accounts available: {len(accounts)}. Selected account: {_mask_account(account_number)}")
     print(f"Positions loaded: {len(positions_df)}. Prices loaded from positions payload: {len(prices)}")
 
     if positions_df.empty:

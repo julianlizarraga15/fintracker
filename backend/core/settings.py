@@ -1,12 +1,27 @@
 import hashlib
 import os
-import re
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
 SSM_ENV_PATH_VAR = "SSM_ENV_PATH"
 SSM_ENV_OVERRIDE_VAR = "SSM_ENV_OVERRIDE"
-SSM_ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+WEB_SSM_PATH = "/fintracker/web"
+SSM_BATCH_SIZE = 10
+BROKER_CREDENTIAL_NAMES = frozenset({
+    "IOL_USERNAME", "IOL_PASSWORD", "IOL_ACCESS_TOKEN", "IOL_REFRESH_TOKEN",
+    "PPI_PUBLIC_API_KEY", "PPI_PRIVATE_API_KEY", "BINANCE_API_KEY", "BINANCE_API_SECRET",
+})
+WEB_SSM_NAMES = (
+    "ACCOUNT_EMAIL", "SNAPSHOTS_LOCAL_DIR", "SNAPSHOTS_S3_BUCKET", "SNAPSHOTS_S3_PREFIX",
+    "JOB_RUNS_LOCAL_DIR", "VALUATIONS_BASE_CURRENCY",
+    "SANTANDER_HOLDINGS_FILE", "CRYPTO_HOLDINGS_FILE",
+    "ENABLE_IOL", "IOL_SOURCE_LAMBDA", "ENABLE_PPI", "PPI_SOURCE_LAMBDA", "BROKER_LAMBDA_REGION",
+    "ENABLE_BINANCE", "BINANCE_BALANCE_LAMBDA", "BINANCE_BASE_URL",
+    "ETHERSCAN_API_KEY", "ETHEREUM_WALLET_ADDRESSES", "ETHEREUM_TOKEN_CONTRACTS", "ENABLE_ETHEREUM",
+    "EXODUS_ETH_ADDRESSES", "EXODUS_BTC_ADDRESSES", "ENABLE_EXODUS",
+    "METAMASK_BTC_ADDRESSES", "ENABLE_METAMASK_BTC", "BLOCKCYPHER_API_KEY",
+    "JWT_SECRET", "DEMO_AUTH_USERNAME", "DEMO_AUTH_PASSWORD", "JWT_EXPIRES_MINUTES",
+)
 
 
 def _env_as_bool(value: str | None) -> bool:
@@ -19,6 +34,8 @@ def _load_ssm_environment() -> None:
     ssm_path = os.getenv(SSM_ENV_PATH_VAR)
     if not ssm_path:
         return
+    if ssm_path.rstrip("/") != WEB_SSM_PATH:
+        raise RuntimeError(f"Web configuration must use SSM_ENV_PATH={WEB_SSM_PATH}")
 
     try:
         import boto3
@@ -28,19 +45,19 @@ def _load_ssm_environment() -> None:
 
     override_existing = _env_as_bool(os.getenv(SSM_ENV_OVERRIDE_VAR))
     client = boto3.client("ssm")
-    paginator = client.get_paginator("get_parameters_by_path")
-
     try:
-        pages = paginator.paginate(Path=ssm_path, WithDecryption=True, Recursive=True)
-        for page in pages:
-            for parameter in page.get("Parameters", []):
+        names = [f"{WEB_SSM_PATH}/{name}" for name in WEB_SSM_NAMES]
+        for offset in range(0, len(names), SSM_BATCH_SIZE):
+            requested = names[offset:offset + SSM_BATCH_SIZE]
+            response = client.get_parameters(Names=requested, WithDecryption=True)
+            for parameter in response.get("Parameters", []):
+                if parameter["Name"] not in requested:
+                    raise RuntimeError("Unexpected web configuration parameter")
                 env_name = parameter["Name"].rstrip("/").rsplit("/", 1)[-1]
-                if not SSM_ENV_NAME_PATTERN.fullmatch(env_name):
-                    raise ValueError(f"Invalid environment variable name from SSM parameter: {parameter['Name']}")
                 if override_existing or env_name not in os.environ:
                     os.environ[env_name] = parameter.get("Value", "")
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Failed to load parameters from SSM path {ssm_path!r}.") from exc
+    except (BotoCoreError, ClientError):
+        raise RuntimeError("Failed to load approved web configuration parameters") from None
 
 
 def short_account_id(email: str) -> str:
@@ -53,23 +70,17 @@ def short_account_id(email: str) -> str:
 @dataclass(frozen=True)
 class Settings:
     DEFAULT_BINANCE_BASE_URL: str
-    DEFAULT_BINANCE_RECV_WINDOW_MS: int
     DEFAULT_JWT_EXPIRES_MINUTES: int
-    DEFAULT_PPI_API_VERSION: str
 
     OUTPUT_DIR: str
     S3_BUCKET: str | None
     S3_PREFIX: str
 
-    IOL_USERNAME: str | None
-    IOL_PASSWORD: str | None
-
-    PPI_PUBLIC_API_KEY: str | None
-    PPI_PRIVATE_API_KEY: str | None
-    PPI_ACCOUNT_NUMBER: str | None
-    PPI_API_VERSION: str
+    ENABLE_IOL: bool
+    IOL_SOURCE_LAMBDA: str
+    PPI_SOURCE_LAMBDA: str
+    BROKER_LAMBDA_REGION: str
     ENABLE_PPI: bool
-    PPI_SANDBOX: bool
 
     ACCOUNT_EMAIL: str | None
     ACCOUNT_ID: str
@@ -77,10 +88,7 @@ class Settings:
     SANTANDER_HOLDINGS_FILE: str
     CRYPTO_HOLDINGS_FILE: str
 
-    BINANCE_API_KEY: str | None
-    BINANCE_API_SECRET: str | None
     BINANCE_BASE_URL: str
-    BINANCE_RECV_WINDOW_MS: int
     ENABLE_BINANCE: bool
     BINANCE_BALANCE_LAMBDA: str
 
@@ -105,21 +113,16 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    # Load local .env first for development, then fill missing values from SSM in production.
     load_dotenv()
+    present = sorted(name for name in BROKER_CREDENTIAL_NAMES if os.getenv(name))
+    if present:
+        raise RuntimeError("Broker credentials are forbidden in the web runtime: " + ", ".join(present))
     _load_ssm_environment()
 
     default_binance_base_url = "https://api.binance.com"
-    default_binance_recv_window_ms = 5000
     default_jwt_expires_minutes = 15
-    default_ppi_api_version = "1.0"
 
     account_email = os.getenv("ACCOUNT_EMAIL")
-
-    try:
-        binance_recv_window_ms = int(os.getenv("BINANCE_RECV_WINDOW_MS", str(default_binance_recv_window_ms)))
-    except ValueError:
-        binance_recv_window_ms = default_binance_recv_window_ms
 
     try:
         jwt_expires_minutes = int(os.getenv("JWT_EXPIRES_MINUTES", str(default_jwt_expires_minutes)))
@@ -130,20 +133,15 @@ def load_settings() -> Settings:
 
     return Settings(
         DEFAULT_BINANCE_BASE_URL=default_binance_base_url,
-        DEFAULT_BINANCE_RECV_WINDOW_MS=default_binance_recv_window_ms,
         DEFAULT_JWT_EXPIRES_MINUTES=default_jwt_expires_minutes,
-        DEFAULT_PPI_API_VERSION=default_ppi_api_version,
         OUTPUT_DIR=os.getenv("SNAPSHOTS_LOCAL_DIR", "data/positions"),
         S3_BUCKET=os.getenv("SNAPSHOTS_S3_BUCKET"),
         S3_PREFIX=os.getenv("SNAPSHOTS_S3_PREFIX", "positions/"),
-        IOL_USERNAME=os.getenv("IOL_USERNAME"),
-        IOL_PASSWORD=os.getenv("IOL_PASSWORD"),
-        PPI_PUBLIC_API_KEY=os.getenv("PPI_PUBLIC_API_KEY"),
-        PPI_PRIVATE_API_KEY=os.getenv("PPI_PRIVATE_API_KEY"),
-        PPI_ACCOUNT_NUMBER=os.getenv("PPI_ACCOUNT_NUMBER"),
-        PPI_API_VERSION=os.getenv("PPI_API_VERSION", default_ppi_api_version),
+        ENABLE_IOL=_env_as_bool(os.getenv("ENABLE_IOL")),
+        IOL_SOURCE_LAMBDA=os.getenv("IOL_SOURCE_LAMBDA", "fintracker-fetch-iol-data"),
+        PPI_SOURCE_LAMBDA=os.getenv("PPI_SOURCE_LAMBDA", "fintracker-fetch-ppi-data"),
+        BROKER_LAMBDA_REGION=os.getenv("BROKER_LAMBDA_REGION", "us-east-1"),
         ENABLE_PPI=_env_as_bool(os.getenv("ENABLE_PPI")),
-        PPI_SANDBOX=_env_as_bool(os.getenv("PPI_SANDBOX")),
         ACCOUNT_EMAIL=account_email,
         ACCOUNT_ID=short_account_id(account_email),
         SANTANDER_HOLDINGS_FILE=os.getenv(
@@ -154,10 +152,7 @@ def load_settings() -> Settings:
             "CRYPTO_HOLDINGS_FILE",
             os.path.join("data", "manual", "crypto_holdings.json"),
         ),
-        BINANCE_API_KEY=os.getenv("BINANCE_API_KEY"),
-        BINANCE_API_SECRET=os.getenv("BINANCE_API_SECRET"),
         BINANCE_BASE_URL=os.getenv("BINANCE_BASE_URL", default_binance_base_url),
-        BINANCE_RECV_WINDOW_MS=binance_recv_window_ms,
         ENABLE_BINANCE=_env_as_bool(os.getenv("ENABLE_BINANCE")),
         BINANCE_BALANCE_LAMBDA=os.getenv("BINANCE_BALANCE_LAMBDA", "fintracker-fetch-binance-balance"),
         ETHERSCAN_API_KEY=os.getenv("ETHERSCAN_API_KEY"),
