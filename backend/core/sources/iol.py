@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from backend.valuation.models import Price
+
 from .models import SourcePositions
 
 
@@ -57,19 +59,20 @@ def load_positions(
     position_columns: list[str],
     get_bearer_tokens: Callable[[str, str], tuple[str, str]],
     get_positions: Callable[[str], list[dict[str, Any]]],
-    extract_positions_as_df: Callable[[list[dict[str, Any]]], pd.DataFrame],
+    extract_positions_as_df: Callable[..., pd.DataFrame],
+    get_prices_for_positions: Callable[[list[dict[str, Any]], str], list[Price]],
 ) -> SourcePositions:
     if not (username and password):
-        print("IOL credentials missing; skipping IOL positions.")
-        return SourcePositions(df=pd.DataFrame(columns=position_columns))
+        raise RuntimeError("IOL credentials unavailable")
 
     access_token, _ = get_bearer_tokens(username, password)
     raw_items = get_positions(access_token)
-    iol_df = extract_positions_as_df(raw_items)
+    iol_df = extract_positions_as_df(raw_items, account_id=account_id)
     if not iol_df.empty:
         iol_df["account_id"] = account_id
     elif raw_items:
         iol_df = fallback_positions_df(
             raw_items, account_id=account_id, position_columns=position_columns
         )
-    return SourcePositions(df=iol_df, raw_items=raw_items, access_token=access_token)
+    prices = get_prices_for_positions(raw_items, access_token)
+    return SourcePositions(df=iol_df.reindex(columns=position_columns), prices=prices)

@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, date, timezone
-from math import nan
 from typing import Any
 
-from backend.core.binance_client import get_account_balances
 from backend.core.binance_prices import fetch_binance_prices
 from backend.core.binance_transform import balances_to_df
 from backend.core.ethereum_client import get_all_balances as get_ethereum_balances
@@ -14,10 +12,6 @@ from backend.core.ethereum_transform import ethereum_balances_to_df
 from backend.core.config import (
     ACCOUNT_ID,
     BINANCE_BALANCE_LAMBDA,
-    BINANCE_API_KEY,
-    BINANCE_API_SECRET,
-    BINANCE_BASE_URL,
-    BINANCE_RECV_WINDOW_MS,
     ENABLE_BINANCE,
     ENABLE_ETHEREUM,
     ENABLE_EXODUS,
@@ -27,22 +21,15 @@ from backend.core.config import (
     EXODUS_ETH_ADDRESSES,
     EXODUS_BTC_ADDRESSES,
     METAMASK_BTC_ADDRESSES,
-    IOL_PASSWORD,
-    IOL_USERNAME,
+    ENABLE_IOL,
+    IOL_SOURCE_LAMBDA,
+    PPI_SOURCE_LAMBDA,
+    BROKER_LAMBDA_REGION,
 )
-from backend.core.iol_client import get_bearer_tokens, get_positions
-from backend.core.iol_transform import extract_positions_as_df
-from backend.core.ppi_client import (
-    get_balance_and_positions as get_ppi_balance_and_positions,
-    login as login_ppi,
-    resolve_account_number as resolve_ppi_account_number,
-)
-from backend.core.ppi_transform import positions_to_df as ppi_positions_to_df
-from backend.core.ppi_transform import (
-    prices_from_positions as ppi_prices_from_positions,
-)
+from backend.core.broker_contract import POSITION_COLUMNS
+from backend.core.broker_lambda import BrokerSourceError, fetch_broker_positions, invoke_json
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
-from backend.core.iol_client import get_prices_for_positions, get_fx_rates
+from backend.core.iol_client import get_fx_rates
 from backend.core.santander_holdings import SantanderHolding, load_holdings
 from backend.core.santander_nav import fetch_share_values as fetch_santander_nav_values
 from backend.core.crypto_holdings import (
@@ -51,9 +38,7 @@ from backend.core.crypto_holdings import (
 )
 from backend.core.crypto_prices import fetch_simple_prices as fetch_crypto_prices
 from backend.core.sources import binance as binance_source
-from backend.core.sources import iol as iol_source
 from backend.core.sources import manual as manual_source
-from backend.core.sources import ppi as ppi_source
 from backend.core.sources import wallets as wallet_source
 from backend.valuation.models import (
     FXRate,
@@ -101,19 +86,6 @@ def _log_job_detail(payload: dict[str, Any]) -> None:
 
 BASE_CURRENCY = "USD"
 
-POSITION_COLUMNS = [
-    "symbol",
-    "description",
-    "instrument_type",
-    "market",
-    "source",
-    "account_id",
-    "currency",
-    "quantity",
-    "price",
-    "valuation",
-]
-
 USDT_USD_RATE = 1.0
 VALID_ASSET_TYPES = {
     "equity",
@@ -132,69 +104,17 @@ ASSET_TYPE_ALIASES = {
 
 
 def _fetch_binance_balances_from_lambda(function_name: str) -> list[dict[str, Any]]:
-    try:
-        import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
-    except Exception as exc:
-        raise RuntimeError(
-            "boto3 is required to invoke the Binance balance Lambda."
-        ) from exc
-
-    try:
-        client = boto3.client("lambda", region_name="sa-east-1")
-        response = client.invoke(
-            FunctionName=function_name, InvocationType="RequestResponse"
-        )
-    except (BotoCoreError, ClientError) as exc:
-        raise RuntimeError(f"Error invoking Lambda '{function_name}': {exc}") from exc
-
-    status_code = response.get("StatusCode")
-    payload_stream = response.get("Payload")
-    payload_text = payload_stream.read().decode("utf-8") if payload_stream else ""
-
-    if status_code and status_code >= 400:
-        raise RuntimeError(
-            f"Lambda '{function_name}' returned status {status_code}: {payload_text[:200]}"
-        )
-
-    if not payload_text:
-        return []
-
-    try:
-        payload_json = json.loads(payload_text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Unexpected Lambda payload from '{function_name}': {payload_text[:200]}"
-        ) from exc
-
-    if (
-        isinstance(payload_json, dict)
-        and "statusCode" in payload_json
-        and payload_json.get("statusCode", 200) >= 400
-    ):
-        raise RuntimeError(
-            f"Lambda '{function_name}' responded with status {payload_json.get('statusCode')}: {payload_text[:200]}"
-        )
-
-    if isinstance(payload_json, dict) and "body" in payload_json:
-        body_content = payload_json.get("body")
+    payload = invoke_json(function_name, "sa-east-1")
+    if isinstance(payload, dict) and "body" in payload:
+        if payload.get("statusCode") != 200:
+            raise BrokerSourceError("Binance source failed")
         try:
-            payload_json = (
-                json.loads(body_content)
-                if isinstance(body_content, str)
-                else body_content
-            )
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"Unexpected Lambda body from '{function_name}': {str(body_content)[:200]}"
-            ) from exc
-
-    if not isinstance(payload_json, list):
-        raise RuntimeError(
-            f"Lambda '{function_name}' returned unexpected payload type: {type(payload_json).__name__}"
-        )
-
-    return payload_json
+            payload = json.loads(payload["body"]) if isinstance(payload["body"], str) else payload["body"]
+        except (ValueError, TypeError):
+            raise BrokerSourceError("Binance returned invalid source data") from None
+    if not isinstance(payload, list):
+        raise BrokerSourceError("Binance returned invalid source data")
+    return payload
 
 
 def _parse_nav_timestamp(raw_value: str | None) -> tuple[date, datetime | None]:
@@ -260,41 +180,24 @@ def _normalized_asset_type(raw_value: Any) -> str | None:
 
 def main():
     df = pd.DataFrame(columns=POSITION_COLUMNS)
-    raw_items: list[dict[str, Any]] = []
-    access_token: str | None = None
     prices: list[PriceModel] = []
 
-    try:
-        iol_result = iol_source.load_positions(
-            username=IOL_USERNAME,
-            password=IOL_PASSWORD,
-            account_id=ACCOUNT_ID,
-            position_columns=POSITION_COLUMNS,
-            get_bearer_tokens=get_bearer_tokens,
-            get_positions=get_positions,
-            extract_positions_as_df=extract_positions_as_df,
-        )
-        access_token = iol_result.access_token
-        raw_items = iol_result.raw_items
-        df = _merge_positions_df(df, iol_result.df)
-    except Exception as e:
-        print(f"Error fetching IOL positions: {e}")
-
-    try:
-        ppi_result = ppi_source.load_positions(
-            enabled=ENABLE_PPI,
-            position_columns=POSITION_COLUMNS,
-            login_ppi=login_ppi,
-            resolve_ppi_account_number=resolve_ppi_account_number,
-            get_ppi_balance_and_positions=get_ppi_balance_and_positions,
-            ppi_positions_to_df=ppi_positions_to_df,
-            ppi_prices_from_positions=ppi_prices_from_positions,
-            log_job_detail=_log_job_detail,
-        )
-        df = _merge_positions_df(df, ppi_result.df)
-        prices.extend(ppi_result.prices)
-    except Exception as e:
-        print(f"Error fetching PPI positions: {e}")
+    for source, enabled, function_name in (
+        ("iol", ENABLE_IOL, IOL_SOURCE_LAMBDA),
+        ("ppi", ENABLE_PPI, PPI_SOURCE_LAMBDA),
+    ):
+        if not enabled:
+            continue
+        try:
+            result = fetch_broker_positions(source, function_name, BROKER_LAMBDA_REGION, ACCOUNT_ID)
+            df = _merge_positions_df(df, result.df)
+            prices.extend(result.prices)
+            print(f"Loaded {len(result.df)} {source.upper()} positions.")
+            print(f"Priced {len(result.prices)} {source.upper()} positions from broker source.")
+            _log_job_detail({"event": "source_counts", "source": source, "loaded": len(result.df),
+                             "priced": len(result.prices), "missing": max(len(result.df) - len(result.prices), 0)})
+        except BrokerSourceError as exc:
+            print(f"Error fetching {source.upper()} positions: {exc}")
 
     santander_holdings = load_holdings()
     holdings_by_fund_id: dict[str, list[SantanderHolding]] = {}
@@ -321,13 +224,8 @@ def main():
         binance_result = binance_source.load_positions(
             enabled=ENABLE_BINANCE,
             balance_lambda=BINANCE_BALANCE_LAMBDA,
-            api_key=BINANCE_API_KEY,
-            api_secret=BINANCE_API_SECRET,
-            base_url=BINANCE_BASE_URL,
-            recv_window_ms=BINANCE_RECV_WINDOW_MS,
             position_columns=POSITION_COLUMNS,
             fetch_from_lambda=_fetch_binance_balances_from_lambda,
-            get_account_balances=get_account_balances,
             balances_to_df=balances_to_df,
         )
         df = _merge_positions_df(df, binance_result.df)
@@ -400,14 +298,6 @@ def main():
 
     if df.empty:
         print("No positions found or unexpected API format.")
-        try:
-            preview = {
-                "items_len": len(raw_items),
-                "first_item": raw_items[0] if raw_items else None,
-            }
-            print("Raw preview:", str(preview)[:500])
-        except Exception:
-            pass
         return
 
     _print_section(f"Positions ({df.shape[0]} rows x {df.shape[1]} cols)")
@@ -442,13 +332,6 @@ def main():
             print(formatted_totals.to_string())
     except Exception:
         pass
-
-    # Fetch and persist prices for the current positions (simple inline behavior)
-    if access_token and raw_items:
-        try:
-            prices.extend(get_prices_for_positions(raw_items, access_token))
-        except Exception as e:
-            print(f"Error fetching prices from IOL: {e}")
 
     nav_display_names: dict[str, str] = {}
     santander_price_models: list[PriceModel] = []

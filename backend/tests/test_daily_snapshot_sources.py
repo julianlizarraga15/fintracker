@@ -30,11 +30,12 @@ def test_iol_source_preserves_daily_snapshot_fallback_shape():
         position_columns=daily_snapshot.POSITION_COLUMNS,
         get_bearer_tokens=lambda _u, _p: ("token", "refresh"),
         get_positions=lambda _token: raw_items,
-        extract_positions_as_df=lambda _items: pd.DataFrame(),
+        extract_positions_as_df=lambda _items, **_kwargs: pd.DataFrame(),
+        get_prices_for_positions=lambda _items, _token: [],
     )
 
-    assert result.access_token == "token"
-    assert result.raw_items == raw_items
+    assert not hasattr(result, "access_token")
+    assert not hasattr(result, "raw_items")
     assert list(result.df.columns) == daily_snapshot.POSITION_COLUMNS
     row = result.df.iloc[0]
     assert row["symbol"] == "AL30"

@@ -1,9 +1,8 @@
 import pandas as pd
-from .config import ACCOUNT_ID
 from .iol_utils import resolve_currency
 
 
-def extract_positions_as_df(items) -> pd.DataFrame:
+def extract_positions_as_df(items, *, account_id: str) -> pd.DataFrame:
     """
     Normalize to: symbol, description, quantity, currency, price, valuation, instrument_type, market.
     Supports both 'activos' (with nested 'titulo') and flat 'tenencias' shapes returned by the IOL portfolio endpoints.
@@ -63,7 +62,7 @@ def extract_positions_as_df(items) -> pd.DataFrame:
                 "instrument_type": instr_type,
                 "market": market,
                 "source": "iol",
-                "account_id": ACCOUNT_ID,
+                "account_id": account_id,
             })
 
     df = pd.DataFrame(rows)

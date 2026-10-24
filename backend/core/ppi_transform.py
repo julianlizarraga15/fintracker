@@ -6,7 +6,6 @@ from typing import Any, Iterable, Optional
 
 import pandas as pd
 
-from backend.core.config import ACCOUNT_ID
 from backend.valuation.models import Price
 
 PPI_SOURCE = "ppi"
@@ -83,7 +82,12 @@ def _position_value(quantity: float, price: Optional[float], amount: Optional[fl
     return nan
 
 
-def positions_to_df(payload: dict[str, Any], position_columns: Optional[list[str]] = None) -> pd.DataFrame:
+def positions_to_df(
+    payload: dict[str, Any],
+    *,
+    account_id: str,
+    position_columns: Optional[list[str]] = None,
+) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
 
     for group in payload.get("groupedAvailability") or []:
@@ -107,7 +111,7 @@ def positions_to_df(payload: dict[str, Any], position_columns: Optional[list[str
                     "instrument_type": "cash",
                     "market": PPI_MARKET,
                     "source": PPI_SOURCE,
-                    "account_id": ACCOUNT_ID,
+                    "account_id": account_id,
                     "currency": currency,
                     "quantity": amount,
                     "price": 1.0,
@@ -140,7 +144,7 @@ def positions_to_df(payload: dict[str, Any], position_columns: Optional[list[str
                     "instrument_type": instrument_type,
                     "market": _clean_text(instrument.get("market")) or group_name or PPI_MARKET,
                     "source": PPI_SOURCE,
-                    "account_id": ACCOUNT_ID,
+                    "account_id": account_id,
                     "currency": currency,
                     "quantity": quantity,
                     "price": price if price is not None else nan,

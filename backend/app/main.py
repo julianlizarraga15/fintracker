@@ -1,3 +1,11 @@
+from backend.core.config import (
+    ACCOUNT_ID,
+    DEMO_AUTH_PASSWORD,
+    DEMO_AUTH_USERNAME,
+    JWT_EXPIRES_MINUTES,
+    JWT_SECRET,
+)
+
 from fastapi import FastAPI
 
 from backend.app.job_runs import (
@@ -38,13 +46,7 @@ from backend.app.valuations import (
     SnapshotNotFound,
     get_latest_valuation_snapshot,
 )
-from backend.core.config import (
-    ACCOUNT_ID,
-    DEMO_AUTH_PASSWORD,
-    DEMO_AUTH_USERNAME,
-    JWT_EXPIRES_MINUTES,
-    JWT_SECRET,
-)
+
 
 app = FastAPI(title="Fintracker API")
 

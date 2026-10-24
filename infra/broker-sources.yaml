@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Fixed broker read Lambdas. Deploy in us-east-1 after the ECR image exists.
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: Existing single-architecture ECR image, pinned by digest in us-east-1.
+    AllowedPattern: '^[0-9]{12}\.dkr\.ecr\.us-east-1\.amazonaws\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$'
+  AccountId:
+    Type: String
+    Description: Existing application ACCOUNT_ID, not the AWS account or broker account number.
+    MinLength: 1
+    MaxLength: 128
+  PpiAccountNumber:
+    Type: String
+    Default: ''
+    Description: Optional fixed PPI account selection. Empty preserves automatic account selection.
+  IolKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: Optional customer-managed SSM key ARN. Empty uses the AWS-managed SSM key.
+    AllowedPattern: '^$|^arn:aws:kms:us-east-1:[0-9]{12}:key/[a-zA-Z0-9-]+$'
+  PpiKmsKeyArn:
+    Type: String
+    Default: ''
+    Description: Optional customer-managed SSM key ARN. Empty uses the AWS-managed SSM key.
+    AllowedPattern: '^$|^arn:aws:kms:us-east-1:[0-9]{12}:key/[a-zA-Z0-9-]+$'
+  WorkerTimeoutSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 60
+    MaxValue: 900
+    Description: Budget for login, both IOL markets, and per-symbol authenticated quotes.
+
+Conditions:
+  IolUsesCustomerKey: !Not [!Equals [!Ref IolKmsKeyArn, '']]
+  PpiUsesCustomerKey: !Not [!Equals [!Ref PpiKmsKeyArn, '']]
+
+Resources:
+  IolLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: /aws/lambda/fintracker-fetch-iol-data
+      RetentionInDays: 14
+  PpiLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: /aws/lambda/fintracker-fetch-ppi-data
+      RetentionInDays: 14
+  IolRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FixedIolRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/iol/IOL_USERNAME
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/iol/IOL_PASSWORD
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fintracker-fetch-iol-data:log-stream:*
+              - !If
+                - IolUsesCustomerKey
+                - Effect: Allow
+                  Action: kms:Decrypt
+                  Resource: !Ref IolKmsKeyArn
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+                      kms:CallerAccount: !Ref AWS::AccountId
+                      kms:EncryptionContext:PARAMETER_ARN:
+                        - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/iol/IOL_USERNAME
+                        - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/iol/IOL_PASSWORD
+                - !Ref AWS::NoValue
+  PpiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FixedPpiRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/ppi/PPI_PUBLIC_API_KEY
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/ppi/PPI_PRIVATE_API_KEY
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/fintracker-fetch-ppi-data:log-stream:*
+              - !If
+                - PpiUsesCustomerKey
+                - Effect: Allow
+                  Action: kms:Decrypt
+                  Resource: !Ref PpiKmsKeyArn
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+                      kms:CallerAccount: !Ref AWS::AccountId
+                      kms:EncryptionContext:PARAMETER_ARN:
+                        - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/ppi/PPI_PUBLIC_API_KEY
+                        - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fintracker/workers/ppi/PPI_PRIVATE_API_KEY
+                - !Ref AWS::NoValue
+  IolFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: fintracker-fetch-iol-data
+      PackageType: Image
+      Architectures: [x86_64]
+      Code:
+        ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [backend.workers.iol.handler]
+      Role: !GetAtt IolRole.Arn
+      MemorySize: 1024
+      Timeout: !Ref WorkerTimeoutSeconds
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          ACCOUNT_ID: !Ref AccountId
+          IOL_USERNAME_PARAMETER: /fintracker/workers/iol/IOL_USERNAME
+          IOL_PASSWORD_PARAMETER: /fintracker/workers/iol/IOL_PASSWORD
+      LoggingConfig:
+        LogFormat: Text
+        LogGroup: !Ref IolLogGroup
+  PpiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: fintracker-fetch-ppi-data
+      PackageType: Image
+      Architectures: [x86_64]
+      Code:
+        ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command: [backend.workers.ppi.handler]
+      Role: !GetAtt PpiRole.Arn
+      MemorySize: 1024
+      Timeout: !Ref WorkerTimeoutSeconds
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          ACCOUNT_ID: !Ref AccountId
+          PPI_PUBLIC_KEY_PARAMETER: /fintracker/workers/ppi/PPI_PUBLIC_API_KEY
+          PPI_PRIVATE_KEY_PARAMETER: /fintracker/workers/ppi/PPI_PRIVATE_API_KEY
+          PPI_ACCOUNT_NUMBER: !Ref PpiAccountNumber
+      LoggingConfig:
+        LogFormat: Text
+        LogGroup: !Ref PpiLogGroup
+
+Outputs:
+  IolFunctionArn:
+    Value: !GetAtt IolFunction.Arn
+  PpiFunctionArn:
+    Value: !GetAtt PpiFunction.Arn
+  IolExecutionRoleArn:
+    Value: !GetAtt IolRole.Arn
+  PpiExecutionRoleArn:
+    Value: !GetAtt PpiRole.Arn
+  WebInvokePolicyForReview:
+    Description: Merge reviewed invokes into web permissions. This does not remove existing grants or grant web config reads.
+    Value: !Sub |
+      {"Version":"2012-10-17","Statement":[
+        {"Effect":"Allow","Action":"lambda:InvokeFunction","Resource":["${IolFunction.Arn}","${PpiFunction.Arn}","arn:${AWS::Partition}:lambda:sa-east-1:${AWS::AccountId}:function:fintracker-fetch-binance-balance"]}
+      ]}
