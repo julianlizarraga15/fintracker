@@ -47,6 +47,18 @@ jobs:
       - name: Scan pushed image
         run: |
           set -euo pipefail
+          scan_start_attempts=12
+          scan_start_delay_seconds=10
+          for ((attempt=1; attempt<=scan_start_attempts; attempt++)); do
+            if aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" \
+              --image-id "imageDigest=$BROKER_IMAGE_DIGEST" > broker-image-scan.json; then
+              break
+            fi
+            if ((attempt == scan_start_attempts)); then
+              exit 1
+            fi
+            sleep "$scan_start_delay_seconds"
+          done
           scan_ready=0
           aws ecr wait image-scan-complete --repository-name "$ECR_REPOSITORY" \
             --image-id "imageDigest=$BROKER_IMAGE_DIGEST" && scan_ready=1
