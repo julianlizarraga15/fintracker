@@ -155,7 +155,7 @@ The implementation now includes the bounded broker contract and invocation adapt
 
 HTTP startup loads SSM configuration before file readers initialize. Scheduled jobs load the same approved settings before choosing their history and lock directory. A regression test runs the real scheduled shell wrapper against synthetic SSM configuration and proves that scheduled and manual locks share the configured directory.
 
-`infra/broker-sources.yaml` defines the isolated functions and roles. `docs/broker-credential-isolation.md` is the operator runbook. The manual image workflow and PR checks build a Lambda-compatible image and run `scripts/check_broker_image.sh` with networking disabled. Local Docker integration is unavailable, so actual image execution remains a CI gate. CloudFormation lint passes locally. `scripts/run_tests.sh` passed all 90 tests after the reviewed fixes; existing datetime deprecation warnings remain. The first sandboxed full run stalled at TestClient, so the complete passing runs were executed outside the sandbox.
+`infra/broker-sources.yaml` defines the isolated functions and roles. `docs/broker-credential-isolation.md` is the operator runbook. The manual image workflow and PR checks build a Lambda-compatible image and run `scripts/check_broker_image.sh` with networking disabled. Local Docker integration is unavailable. GitHub CI built the actual image and passed the network-disabled smoke check, the Docker backend suite, and browser workflows in [run 40100395685](https://github.com/julianlizarraga15/fintracker/actions/runs/40100395685). CloudFormation lint passes locally. `scripts/run_tests.sh` passed all 90 tests after the reviewed fixes; existing datetime deprecation warnings remain. The first sandboxed full run stalled at TestClient, so the complete passing runs were executed outside the sandbox.
 
 Independent review found and prompted fixes for malformed PPI data becoming successful empty portfolios, missing SDK HTTP timeouts, an outdated direct-auth utility, deployment cleanup ordering, and SSM configuration import ordering. The remaining live IAM and Binance function checks are not implied by passing code tests.
 
@@ -171,7 +171,7 @@ Independent review found and prompted fixes for malformed PPI data becoming succ
 - [x] Implement IOL authentication and every authenticated request inside its handler. No access token or refresh token leaves the function.
 - [x] Implement PPI authentication, account selection, portfolio retrieval, and transformation inside its handler.
 - [x] Separate worker configuration from web configuration. Avoid importing the shared recursive web loader into handlers with unnecessary settings requirements.
-- [ ] Package the functions reproducibly. Verify the actual Lambda-compatible package or image with synthetic external responses and bounded HTTP timeouts.
+- [x] Package the functions reproducibly. Verify the actual Lambda-compatible package or image with synthetic external responses and bounded HTTP timeouts.
 - [x] Add infrastructure definitions for separate execution roles, fixed function names, timeouts, concurrency limits, log retention, and credential references. Do not include secret values in templates or outputs.
 
 ### 3. Integrate EC2 valuation with source functions
@@ -180,7 +180,7 @@ Independent review found and prompted fixes for malformed PPI data becoming succ
 - [x] Remove the IOL token and raw authenticated-response dependency from `daily_snapshot.py` and `SourcePositions` where callers no longer need them.
 - [x] Keep public FX retrieval and existing local valuation, snapshot, manual input, and job behavior.
 - [x] Remove migrated direct credential fallback and unused web secret settings. Harden Binance invocation failure handling without silently changing its response contract.
-- [ ] Run focused source tests and `scripts/run_tests.sh` when practical. Use the existing synthetic HTTP and end-to-end workflows to verify Refresh, history, manual holdings, and dashboard behavior.
+- [x] Run focused source tests and `scripts/run_tests.sh` when practical. Use the existing synthetic HTTP and end-to-end workflows to verify Refresh, history, manual holdings, and dashboard behavior.
 
 ### 4. Prepare a concrete AWS change set
 
@@ -238,7 +238,7 @@ Temporary exploration artifacts exist under `/tmp/fintracker-secret-isolation/`,
 3. Use a 6.1 Sol agent for the shared source contract, invocation/error/log boundary, configuration split, and infrastructure design because those decisions cross the broker seams.
 4. Keep production IAM and cutover with one owner. Give reviewers the exact current diff and this plan. Parallel workers must use separate worktrees if they edit overlapping files.
 
-The source contract, handlers, integration, infrastructure template, operator runbook, and local regression checks are prepared. The next gate is CI execution of the actual image, followed by the user-controlled AWS preparation and live verification in the runbook. Do not begin a whole-job S3/DynamoDB migration as an accidental prerequisite.
+The source contract, handlers, integration, infrastructure template, operator runbook, and local regression checks are prepared. The actual image passed CI. The next gate is user-controlled AWS preparation and live verification in the runbook. Do not begin a whole-job S3/DynamoDB migration as an accidental prerequisite.
 
 ## Supporting references
 
