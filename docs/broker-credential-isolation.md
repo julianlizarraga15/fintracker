@@ -20,7 +20,7 @@ Use the ECR console to create private repository `fintracker-broker-sources` in 
 
 Give the separate GitHub build identity ECR authorization and push access to this repository. Follow the existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secret setup. Do not put broker keys in GitHub. Review that identity separately from the EC2 role. The EC2 role must have no write access to this repository or the repository policy.
 
-In the ECR repository permissions, grant Lambda image retrieval for these functions. Replace `AWS_ACCOUNT_ID` in this policy with your AWS account number, currently `875551125619`.
+In the ECR repository permissions, grant Lambda image retrieval for these functions. Replace `AWS_ACCOUNT_ID` in this policy with your AWS account number.
 
 ```json
 {
@@ -97,12 +97,13 @@ Create the web's needed configuration under `/fintracker/web` using the console.
 
 Set `SSM_ENV_PATH=/fintracker/web` in the approved container configuration. The new web loader uses `ssm:GetParameters` on an explicit allowlist. Grant that action on every exact allowlisted ARN, including names not currently created, because the loader requests all names in batches. Do not grant `GetParametersByPath`, `/fintracker/*`, `/fintracker`, or a wildcard parent. Include `ACCOUNT_EMAIL` so that the web calculates the same `ACCOUNT_ID` used by the workers.
 
-Generate a reviewable web configuration statement locally from the code's allowlist. This reads source code, does not import the application, and makes no AWS requests. Replace the nonsecret AWS account number if deploying elsewhere.
+Generate a reviewable web configuration statement from the code's allowlist. First set `AWS_ACCOUNT_ID` to your nonsecret AWS account number. This reads source code without importing the application or retrieving parameter values.
 
 ```bash
 	python3 - <<'PY'
 import ast
 import json
+import os
 from pathlib import Path
 
 module = ast.parse(Path("backend/core/settings.py").read_text())
@@ -110,7 +111,7 @@ names = next(ast.literal_eval(node.value) for node in module.body
              if isinstance(node, ast.Assign)
              and any(isinstance(target, ast.Name) and target.id == "WEB_SSM_NAMES"
                      for target in node.targets))
-account = "875551125619"
+account = os.environ["AWS_ACCOUNT_ID"]
 print(json.dumps({"Version": "2012-10-17", "Statement": [{
     "Effect": "Allow", "Action": "ssm:GetParameters",
     "Resource": [f"arn:aws:ssm:us-east-1:{account}:parameter/fintracker/web/{name}"

@@ -35,7 +35,7 @@ The following facts were established during this session. Recheck live facts bef
 
 | Item | Evidence and limit |
 |---|---|
-| EC2 | Instance `i-0543a3b0c146f3cbb` in `us-east-1`. SSH works as `ec2-user` at `18.233.79.102`. |
+| EC2 | Production runs in `us-east-1`. The existing deployment workflow identifies the instance. SSH access was verified. |
 | Web runtime role | AWS errors identify the assumed role as `fintracker-ec2-role`. Its complete effective permissions have not been inspected. |
 | Web container | `fintracker-backend`. Compose mounts host `./data` at `/app/data`. |
 | SSM configuration | A targeted container environment check returned `SSM_ENV_PATH=/fintracker/prod`. `SSM_ENV_OVERRIDE` was false. |
@@ -43,11 +43,11 @@ The following facts were established during this session. Recheck live facts bef
 | Broker parameter names | Metadata under `/fintracker/prod` included `PPI_PRIVATE_API_KEY`, `PPI_PUBLIC_API_KEY`, `IOL_USERNAME`, and `IOL_PASSWORD`. It also included web auth settings and `TEST_SECRET`. No values were retrieved for the audit. |
 | Parameter types | PPI keys and `IOL_USERNAME` were `SecureString`. `IOL_PASSWORD` and the former Binance parameters were `String`. `String` lacks the additional `SecureString` value encryption and KMS controls; do not describe it as wholly unencrypted at rest. |
 | Binance function | `fintracker-fetch-binance-balance` in `sa-east-1`. The user confirmed both Binance variables exist in its environment and its VPC section says no VPC configuration. |
-| Binance execution role | The user reported `fintracker-fetch-binance-balance-role-f860e8p1`. Its policies and deployed function code remain unverified. |
+| Binance execution role | The user identified a separate execution role in the Lambda console. Its policies and deployed function code remain unverified. |
 | Current job duration | The last 14 recorded full valuation runs all reported success and took 10–25 seconds, mostly 11–13 seconds. This is not a Lambda benchmark or proof that every source succeeded. |
 | Local tooling | SSH is available locally. The local AWS CLI and Docker were unavailable in the WSL environment. EC2 has AWS CLI and Docker. Host Python on EC2 lacks `boto3`; container Python has application dependencies. |
 
-The deployment workflow references AWS account `875551125619`. The SSH identity file is `/home/chulien/.ssh/fintracker-ec2-20251117.pem`. Use the existing key without reading or copying its contents. The host key for `18.233.79.102` was already verified in `known_hosts`.
+Use the user's existing SSH identity without reading or copying its contents. Confirm the target and its known host entry through the user's local connection configuration. Public documentation does not need the server address or private-key filename.
 
 ### Binance cleanup already completed
 

@@ -12,7 +12,6 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: 875551125619.dkr.ecr.us-east-1.amazonaws.com
   ECR_REPOSITORY: fintracker-broker-sources
 
 jobs:
@@ -26,12 +25,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registries: '875551125619'
+        id: ecr
       - uses: docker/setup-buildx-action@v3
       - name: Build and push single-architecture image
         env:
           IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           set -euo pipefail
           image="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
