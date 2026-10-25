@@ -1,6 +1,6 @@
 # Fintracker broker credential isolation
 
-Updated 2026-10-24. **Production cutover complete and verified.** Public web Refresh uses `/fintracker/web` plus three read-only broker readers; the EC2 role cannot read broker credentials or deploy/inspect those readers. Web CI/CD remains manually disabled.
+Updated 2026-10-25. **Production cutover complete and verified.** Public web Refresh uses `/fintracker/web` plus three read-only broker readers; the EC2 role cannot read broker credentials or deploy/inspect those readers. PR 21 is merged. Web CI/CD remains manually disabled.
 
 ## Completed outcome
 
@@ -9,8 +9,8 @@ Updated 2026-10-24. **Production cutover complete and verified.** Public web Ref
 - Backend runs the reviewed credential-free image built from source `070cbf5` (image ID `sha256:99979f8cbb83c1efae0358e3230315fb8475fc362090401651d12446db2899b6`). It uses `/fintracker/web`, disables dotenv, and mounts only persistent application data. Its initialized settings and newly recreated process were checked; broker credentials and static AWS credentials were absent. The production host checkout remains `b061876` to preserve unrelated host changes; the running image is pinned in the isolated compose bootstrap.
 - EC2 role has zero attached managed policies and six reviewed inline policies: exact web parameter reads, SSM agent channels without parameter access, exactly three unqualified reader invokes, web/frontend image pulls, explicit role-assumption deny, and the existing snapshot S3 write permissions. The old wildcard `/fintracker/*` policy and broad SSM/ECR managed policies were removed. Applied-policy simulation passed 503 resource-specific checks; Access Analyzer returned no findings. Resource policy, trust, and metadata reviews are recorded in the verification artifacts.
 - Old IOL/PPI parameters and their historical versions under `/fintracker/prod` were deleted only after the replacement and financial equivalence checks passed. Worker `SecureString` parameters remain. The old host `.env` was replaced from scratch with nonsecret bootstrap settings without reading it; no credential rotation was performed. No evidence of theft was established, and existing keys remain confined to the worker store.
-- Authenticated public HTTPS Refresh succeeded after cleanup and backend recreation. A scheduled systemd valuation also completed successfully. Both preserved all source position/quantity fingerprints, existing manual holdings, valuation history and price history; broker valuation fields matched the pre-cutover baseline. A same-value manual update/readback passed and preserved original file bytes. No financial amounts or hashes are stored in these public artifacts.
-- The valuation timer is active and enabled; next run is 2026-10-25 16:00 UTC. Existing three unpriced Binance balances remained unpriced as in the baseline; they caused no new job errors.
+- Authenticated public HTTPS Refresh succeeded after cleanup and backend recreation. The systemd valuation service was manually invoked after cleanup and completed successfully. Both runs preserved all source position/quantity fingerprints, existing manual holdings, valuation history and price history; broker valuation fields matched the pre-cutover baseline. A same-value manual update/readback passed and preserved original file bytes. No financial amounts or hashes are stored in these public artifacts.
+- The valuation timer was active and enabled at the 2026-10-25 03:58 UTC check. Its last trigger (2026-10-24 16:00 UTC) was before cutover; the first post-cutover timer-triggered run is due 2026-10-25 16:00 UTC and remains to be observed. Existing three unpriced Binance balances remained unpriced as in the baseline; they caused no new job errors.
 - Binance code is wrapped by a fail-closed response/log guard. Read-only API capability checks confirmed trading, withdrawals, futures and transfer permissions are disabled. Existing legacy balance results matched the replacement. No keys were rotated.
 - Backend suite: 113 passed, with nine existing deprecation warnings. CI run [40118168893](https://github.com/julianlizarraga15/fintracker/actions/runs/40118168893) passed backend, broker package and browser checks. PR 21 passed all three required checks. Keep the web CI/CD workflow disabled unless the user explicitly changes that instruction.
 
@@ -23,6 +23,12 @@ Updated 2026-10-24. **Production cutover complete and verified.** Public web Ref
 - [Operational plan](docs/plans/20261024-broker-credential-isolation.md)
 - [Deployment and rollback runbook](docs/broker-credential-isolation.md)
 - Decision trail: `.audit/credential-isolation.tsv` (local checklist is ignored and contains no credentials)
+
+## Safe web deployment workflow
+
+The old web workflow was unsafe: it used the standard Compose file, implicitly loaded `.env`, and ran `down --remove-orphans`. A replacement is being reviewed on branch `fix/isolated-web-cicd`; it is **not enabled and has not deployed to production**. It builds only changed services with run-specific tags, gates deployment on the shared backend/package/browser tests, uses the isolated Compose file and `/dev/null` as Compose's interpolation env file, and updates only the selected backend or frontend. Backend updates stop and later restore the valuation timer, drain the current job, acquire the app's shared valuation lock, check health, and retain the previous image for rollback. SSM output handling records status only.
+
+Your original instruction was to keep web CI/CD disabled. The replacement remains off; GitHub workflow state must be checked again before any future activation. Local syntax, YAML, mocked deploy/rollback, SSM payload/polling, and production-host Compose parsing were checked. No production deployment was attempted from this branch.
 
 ## Guardrails and rollback
 

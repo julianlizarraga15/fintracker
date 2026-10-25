@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ${FINTRACKER_BACKEND_IMAGE:?Set the reviewed backend image}
+    image: ${FINTRACKER_BACKEND_IMAGE:-fintracker-backend:isolation-070cbf5}
     pull_policy: never
     env_file:
       - .isolation-bootstrap
@@ -10,6 +10,16 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+    networks:
+      - default
+
+  frontend:
+    image: ${FINTRACKER_FRONTEND_IMAGE:-875551125619.dkr.ecr.us-east-1.amazonaws.com/fintracker-frontend:latest}
+    pull_policy: never
+    container_name: fintracker-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
     networks:
       - default
 

@@ -170,6 +170,14 @@ After IAM removal, do not deploy a web version that requires direct broker crede
 
 A template or this historical procedure alone cannot establish current isolation. The completed live review and cutover evidence are linked at the top; recheck current state before future production mutations.
 
+## Future web CI/CD
+
+The former `ci-cd` workflow was disabled because it used the default Compose file, loaded `.env`, and ran `down --remove-orphans`. A replacement is under review in `fix/isolated-web-cicd`. It is not enabled and has not deployed to production. It reuses the backend, broker-package, and browser checks; builds only changed services with unique run tags; fetches the deployment helper and isolated Compose file from the exact tested commit; and updates only the selected backend or frontend service.
+
+Backend deployment pauses the valuation timer, waits for the current service to drain, resolves the initialized app's valuation lock path against the mounted data directory, and acquires the same lock used by manual and scheduled valuations. It recreates only the backend with explicit `--env-file /dev/null` for Compose interpolation and `.isolation-bootstrap` as the service environment, then checks health and releases the lock before restarting the timer. The previous local image is tagged for rollback. On rollback failure, the lock remains held and the timer stays stopped to prevent a partial valuation. SSM output is not copied into workflow logs; the workflow polls for a terminal command status with an execution timeout.
+
+The GitHub workflow remains `disabled_manually` per the user's earlier instruction. Recheck that state before any future activation. Static checks and mocked backend, frontend, failure/rollback, and SSM status scenarios passed; the replacement was not run against production.
+
 
 ## Verified production operation
 
