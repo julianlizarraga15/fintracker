@@ -2,8 +2,8 @@
   "date": "2026-10-25",
   "workflow": ".github/workflows/ci-cd.yml",
   "state": "disabled_manually",
-  "live_state_checked_at": "2026-10-25T03:58:00Z",
-  "replacement_status": "prepared_on_fix/isolated-web-cicd; not activated; not deployed",
+  "live_state_checked_at": "2026-10-25T04:59:28Z",
+  "replacement_status": "merged_in_PR_22; not activated; not deployed",
   "triggers": {
     "push": "main, application/deployment inputs only",
     "workflow_dispatch": "main only"
