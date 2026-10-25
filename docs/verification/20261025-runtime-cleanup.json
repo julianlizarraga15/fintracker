@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-25",
+  "status": "web_runtime_cleanup_deployed; live_artifact_housekeeping_pending_authentication",
+  "pull_request": "https://github.com/julianlizarraga15/fintracker/pull/26",
+  "source_commit": "c50fa5758f2bf8ff27a95edccfe56e5a812f1c44",
+  "verification": {
+    "source_backend_tests_passed": 124,
+    "independent_review": {
+      "model": "gpt-6-astra",
+      "reviewed_head": "c93fd0176a1bfa6c206694c97e15564ca9337dbf",
+      "blocking_findings": 0
+    },
+    "pull_request_run": "40241460256",
+    "backend": "passed",
+    "browser": "passed",
+    "broker_package": "passed",
+    "web_package": "passed",
+    "actual_web_image_excludes_worker_code_sdk_and_test_tools": true,
+    "actual_web_image_offline_http_startup": "passed",
+    "shared_proxy_compose_parser": "passed",
+    "exact_release_image_check_before_push": "passed"
+  },
+  "production_release": {
+    "run": "40241589819",
+    "url": "https://github.com/julianlizarraga15/fintracker/actions/runs/40241589819",
+    "conclusion": "success",
+    "workflow_updated_at": "2026-10-25T22:47:15Z",
+    "backend_built_and_deployed": true,
+    "frontend_build": "skipped",
+    "shared_proxy_manifest_applied": false,
+    "shared_proxy_reload": "existing release path",
+    "watering_recreated_by_release_path": false
+  },
+  "public_checks_at_2026_10_25T22_47_33Z": {
+    "fintracker_health_http": 200,
+    "watering_health_http": 200,
+    "watering_home_http": 200,
+    "same_checks_passed_before_deployment": true
+  },
+  "retired_in_repository": [
+    "docker-compose.yml",
+    "scripts/local_build_and_up.sh"
+  ],
+  "replacement_shared_proxy_manifest": "docker-compose.proxy.yml",
+  "live_cleanup": {
+    "aws_authentication": "previous temporary session logged out; renewed login expired without authorization",
+    "container_identity_inventory": "pending",
+    "host_legacy_file_retirement": "not performed",
+    "docker_image_and_stopped_container_deletion": "not performed",
+    "ecr_image_deletion": "not performed",
+    "post_cleanup_authenticated_live_valuation": "pending"
+  },
+  "limits": [
+    "Public HTTP checks do not establish unchanged container identities or a successful new financial valuation.",
+    "Host and ECR artifact deletion requires a fresh inventory and retention of active resources and safe rollback images.",
+    "The existing shared proxy reload remains a shared operation for Fintracker and watering-system."
+  ]
+}
