@@ -2,7 +2,7 @@
   "date": "2026-10-25",
   "workflow": ".github/workflows/ci-cd.yml",
   "state": "active",
-  "live_state_checked_at": "2026-10-25T05:07:27Z",
+  "live_state_checked_at": "2026-10-25T21:37:21Z",
   "replacement_status": "merged_in_PR_22; explicitly activated; production deployment succeeded",
   "triggers": {
     "push": "main, application/deployment inputs only",
@@ -78,13 +78,40 @@
         "enabled": true,
         "next_run": "2026-10-25T16:00:00Z",
         "first_post_cutover_timer_run_observed": false
+      },
+      "scheduled_valuation_post_cutover": {
+        "timer_active": true,
+        "timer_enabled": true,
+        "last_trigger": "2026-10-25T16:00:11Z",
+        "next_run": "2026-10-26T16:00:00Z",
+        "service_result": "success",
+        "service_exit_code": 0,
+        "service_finished_at": "2026-10-25T16:00:28Z",
+        "job_record_status": "success",
+        "job_record_errors": 0,
+        "job_record_valuations_saved": true,
+        "job_record_s3_uploaded": true,
+        "positions_count": 33,
+        "source_counts": {
+          "iol": 7,
+          "ppi": 10,
+          "binance_loaded": 6,
+          "binance_priced": 3,
+          "binance_missing_prices": 3,
+          "santander_manual": 2,
+          "crypto_manual": 2
+        },
+        "history_entries": 14,
+        "latest_snapshot_readable": true,
+        "price_history_readable": true,
+        "price_history_points": 29,
+        "sensitive_values_recorded": false
       }
     },
     "mocked_safe_pre_mutation_timer_restore": "passed"
   },
   "limits": [
-    "The first automatic timer-triggered valuation after this deployment was pending at the last recorded AWS check.",
-    "AWS CLI credentials are unavailable in the current session, so timer state has not been rechecked after 2026-10-25T05:07:27Z.",
+    "The temporary AWS CLI session used for the 21:33 UTC read-only checks was logged out after verification.",
     "The production deployment used the merged workflow commit; it was not built from the current documentation branch."
   ]
 }
