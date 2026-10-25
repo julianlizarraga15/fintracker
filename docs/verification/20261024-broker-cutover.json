@@ -17,10 +17,15 @@
       "s3_upload": true,
       "run_id": "2026-10-24_175447"
     },
-    "scheduled_systemd_valuation": {
+    "systemd_valuation_service_manual_trigger": {
       "success": true,
       "exit_status": 0,
       "run_id": "2026-10-24_174018"
+    },
+    "post_cutover_timer_trigger": {
+      "status": "pending",
+      "last_trigger_before_cutover_utc": "2026-10-24T16:00:11Z",
+      "next_run_utc": "2026-10-25T16:00:00Z"
     },
     "timer": {
       "active": true,

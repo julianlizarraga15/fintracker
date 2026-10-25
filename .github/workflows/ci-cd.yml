@@ -4,19 +4,96 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/**"
+      - "docker-compose.isolated.yml"
+      - ".dockerignore"
+      - ".github/workflows/ci-cd.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fintracker-production-deploy
+  cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
   ECR_REGISTRY: 875551125619.dkr.ecr.us-east-1.amazonaws.com
-  BE_REPO: fintracker-backend
-  FE_REPO: fintracker-frontend
-  EC2_INSTANCE_ID: "i-0543a3b0c146f3cbb"
+  BACKEND_REPO: fintracker-backend
+  FRONTEND_REPO: fintracker-frontend
+  EC2_INSTANCE_ID: i-0543a3b0c146f3cbb
+  SSM_EXECUTION_TIMEOUT_SECONDS: "3600"
+  SSM_DELIVERY_TIMEOUT_SECONDS: "60"
+  SSM_TERMINAL_POLL_TIMEOUT_SECONDS: "3900"
+  SSM_CANCEL_POLL_TIMEOUT_SECONDS: "900"
+  SSM_POLL_INTERVAL_SECONDS: "10"
 
 jobs:
-  build_and_push:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+      frontend: ${{ steps.detect.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect deployable changes
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")"
+          backend=false
+          frontend=false
+          while IFS= read -r path; do
+            case "$path" in
+              backend/*|scripts/*|docker-compose.isolated.yml|.dockerignore)
+                if [[ "$path" != scripts/deploy_isolated_web.sh ]]; then
+                  backend=true
+                fi
+                ;;
+            esac
+            case "$path" in
+              frontend/*|docker-compose.isolated.yml)
+                frontend=true
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
+  quality:
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    needs: [changes, quality]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set unique release tag
+        id: release
+        shell: bash
+        run: echo "tag=${GITHUB_SHA::12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -28,27 +105,34 @@ jobs:
         with:
           registries: 875551125619
 
-      - name: Compute tags
-        id: tags
+      - name: Build and push backend image
+        if: needs.changes.outputs.backend == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          SHA="${GITHUB_SHA::7}"
-          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          docker build --pull \
+            -t "$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG" \
+            -f backend/Dockerfile .
+          docker push "$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG"
 
-      - name: Build & push backend
+      - name: Build and push frontend image
+        if: needs.changes.outputs.frontend == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          docker build --pull -t "$ECR_REGISTRY/$BE_REPO:latest" -t "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}" -f backend/Dockerfile .
-          docker push "$ECR_REGISTRY/$BE_REPO:latest"
-          docker push "$ECR_REGISTRY/$BE_REPO:${{ steps.tags.outputs.sha }}"
+          docker build --pull \
+            -t "$ECR_REGISTRY/$FRONTEND_REPO:$RELEASE_TAG" \
+            ./frontend
+          docker push "$ECR_REGISTRY/$FRONTEND_REPO:$RELEASE_TAG"
 
-      - name: Build & push frontend
-        run: |
-          docker build --pull -t "$ECR_REGISTRY/$FE_REPO:latest" -t "$ECR_REGISTRY/$FE_REPO:${{ steps.tags.outputs.sha }}" ./frontend
-          docker push "$ECR_REGISTRY/$FE_REPO:latest"
-          docker push "$ECR_REGISTRY/$FE_REPO:${{ steps.tags.outputs.sha }}"
-
-  deploy_via_ssm:
-    needs: build_and_push
+  deploy:
+    needs: [changes, quality, build]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
+    timeout-minutes: 85
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -56,43 +140,97 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Send deploy command via SSM
-        id: ssm
+      - name: Deploy only changed services through SSM
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          RELEASE_SHA: ${{ github.sha }}
+          DEPLOY_BACKEND: ${{ needs.changes.outputs.backend }}
+          DEPLOY_FRONTEND: ${{ needs.changes.outputs.frontend }}
         run: |
-          CMD_ID=$(aws ssm send-command \
+          backend_image="-"
+          frontend_image="-"
+          if [[ "$DEPLOY_BACKEND" == "true" ]]; then
+            backend_image="$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG"
+          fi
+          if [[ "$DEPLOY_FRONTEND" == "true" ]]; then
+            frontend_image="$ECR_REGISTRY/$FRONTEND_REPO:$RELEASE_TAG"
+          fi
+
+          jq -n \
+            --arg backend "$backend_image" \
+            --arg frontend "$frontend_image" \
+            --arg deploy_backend "$DEPLOY_BACKEND" \
+            --arg deploy_frontend "$DEPLOY_FRONTEND" \
+            --arg release_tag "$RELEASE_TAG" \
+            --arg release_sha "$RELEASE_SHA" \
+            --arg project_dir "/home/ec2-user/fintracker" \
+            --arg instance_id "$EC2_INSTANCE_ID" \
+            --arg region "$AWS_REGION" \
+            --arg registry "$ECR_REGISTRY" \
+            --arg backend_repo "$BACKEND_REPO" \
+            --arg frontend_repo "$FRONTEND_REPO" \
+            --arg execution_timeout "$SSM_EXECUTION_TIMEOUT_SECONDS" \
+            '{commands: [
+              "export HOME=/home/ec2-user",
+              "set -euo pipefail",
+              "PROJECT_DIR=" + $project_dir,
+              "git -c safe.directory=" + $project_dir + " -C \"$PROJECT_DIR\" fetch --quiet origin main",
+              "git -c safe.directory=" + $project_dir + " -C \"$PROJECT_DIR\" show " + $release_sha + ":scripts/deploy_isolated_web.sh | bash -s -- " + $backend + " " + $frontend + " " + $deploy_backend + " " + $deploy_frontend + " " + $release_tag + " " + $region + " " + $registry + " " + $backend_repo + " " + $frontend_repo + " " + $release_sha
+            ], executionTimeout: [$execution_timeout]}' > "$RUNNER_TEMP/ssm-parameters.json"
+
+          command_id="$(aws ssm send-command \
             --instance-ids "$EC2_INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Fintracker deployment" \
-            --parameters '{
-              "commands": [
-                "export HOME=/home/ec2-user",
-                "set -euo pipefail",
-                "cd /home/ec2-user/fintracker",
-                "git config --global --add safe.directory /home/ec2-user/fintracker",
-                "echo Pulling latest repository changes...",
-                "git pull --rebase",
-                "aws ecr get-login-password --region '"$AWS_REGION"' | docker login --username AWS --password-stdin '"$ECR_REGISTRY"'",
-                "docker-compose pull",
-                "docker-compose down --remove-orphans",
-                "docker-compose up -d",
-                "echo DEPLOY DONE"
-              ]
-            }' \
-            --query "Command.CommandId" \
-            --output text)
-          echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
+            --document-name AWS-RunShellScript \
+            --comment "Fintracker isolated release $RELEASE_TAG" \
+            --timeout-seconds "$SSM_DELIVERY_TIMEOUT_SECONDS" \
+            --parameters "file://$RUNNER_TEMP/ssm-parameters.json" \
+            --query 'Command.CommandId' \
+            --output text)"
 
-      - name: Wait for completion
-        run: |
-          aws ssm wait command-executed \
-            --command-id "${{ steps.ssm.outputs.cmd_id }}" \
-            --instance-id "$EC2_INSTANCE_ID"
+          terminal_status() {
+            case "$1" in
+              Success|Failed|Cancelled|TimedOut|DeliveryTimedOut|ExecutionTimedOut|Undeliverable|Terminated|InvalidPlatform|AccessDenied)
+                return 0 ;;
+              *)
+                return 1 ;;
+            esac
+          }
 
-      - name: Fetch SSM command output on failure
-        if: ${{ failure() }}
-        run: |
-          aws ssm get-command-invocation \
-            --command-id "${{ steps.ssm.outputs.cmd_id }}" \
-            --instance-id "$EC2_INSTANCE_ID" \
-            --query '{Status:Status, StdOut:StandardOutputContent, StdErr:StandardErrorContent}' \
-            --output text
+          poll_deadline=$((SECONDS + SSM_TERMINAL_POLL_TIMEOUT_SECONDS))
+          command_status="Pending"
+          while (( SECONDS < poll_deadline )); do
+            command_status="$(aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --query Status \
+              --output text 2>/dev/null || echo Pending)"
+            if terminal_status "$command_status"; then
+              if [[ "$command_status" == Success ]]; then
+                echo "Isolated deployment completed."
+                exit 0
+              fi
+              echo "Isolated deployment ended with SSM status: $command_status" >&2
+              exit 1
+            fi
+            sleep "$SSM_POLL_INTERVAL_SECONDS"
+          done
+
+          aws ssm cancel-command \
+            --command-id "$command_id" \
+            --instance-ids "$EC2_INSTANCE_ID" >/dev/null 2>&1 || true
+          cancel_deadline=$((SECONDS + SSM_CANCEL_POLL_TIMEOUT_SECONDS))
+          while (( SECONDS < cancel_deadline )); do
+            command_status="$(aws ssm get-command-invocation \
+              --command-id "$command_id" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --query Status \
+              --output text 2>/dev/null || echo Pending)"
+            if terminal_status "$command_status"; then
+              echo "SSM deployment ended after cancellation with status: $command_status" >&2
+              exit 1
+            fi
+            sleep "$SSM_POLL_INTERVAL_SECONDS"
+          done
+          echo "Could not confirm the SSM command reached a terminal state." >&2
+          exit 1

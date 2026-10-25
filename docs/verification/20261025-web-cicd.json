@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-25",
+  "workflow": ".github/workflows/ci-cd.yml",
+  "state": "disabled_manually",
+  "live_state_checked_at": "2026-10-25T03:58:00Z",
+  "replacement_status": "prepared_on_fix/isolated-web-cicd; not activated; not deployed",
+  "triggers": {
+    "push": "main, application/deployment inputs only",
+    "workflow_dispatch": "main only"
+  },
+  "quality_gate": [
+    "backend",
+    "broker-package",
+    "browser"
+  ],
+  "release_images": {
+    "tags": "unique per commit, workflow run, and attempt; no latest tag",
+    "services": "build and deploy only services with relevant source changes"
+  },
+  "deployment": {
+    "mechanism": "SSM AWS-RunShellScript",
+    "compose_file": "docker-compose.isolated.yml from exact release commit",
+    "compose_interpolation_env_file": "/dev/null",
+    "backend_service_env_file": ".isolation-bootstrap",
+    "dotenv_disabled": true,
+    "only_selected_services_recreated": true,
+    "compose_down_or_orphan_removal": false,
+    "unrelated_proxy_or_watering_containers_recreated": false,
+    "backend_job_lock": "derived after loading approved web settings and checked against actual /app/data mount",
+    "timer": "paused while draining/deploying; restarted only after health or successful rollback",
+    "rollback": "previous running image IDs tagged locally; health checked after restore",
+    "ssm_output_in_github_logs": "status only",
+    "ssm_execution_timeout_seconds": 3600,
+    "workflow_timeout_minutes": 85
+  },
+  "verification": {
+    "bash_syntax": "passed",
+    "workflow_and_compose_yaml_parse": "passed",
+    "mocked_backend_frontend_and_rollback_scenarios": "passed",
+    "mocked_ssm_payload_and_terminal_poll": "passed",
+    "production_host_compose_config_with_explicit_dev_null_env": "passed",
+    "independent_review": "no blocking findings",
+    "production_deployment_attempted": false,
+    "mocked_safe_pre_mutation_timer_restore": "passed"
+  },
+  "limits": [
+    "The replacement workflow has not been enabled or run against production.",
+    "Mocked rollback and SSM cancellation checks are not live AWS execution proof.",
+    "No production image was built or pushed by this branch."
+  ]
+}
