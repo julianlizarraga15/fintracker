@@ -29,7 +29,7 @@ from backend.core.config import (
 from backend.core.broker_contract import POSITION_COLUMNS
 from backend.core.broker_lambda import BrokerSourceError, fetch_broker_positions, invoke_json
 from backend.core.storage import save_snapshot_files, maybe_upload_to_s3
-from backend.core.iol_client import get_fx_rates
+from backend.core.fx_rates import get_fx_rates
 from backend.core.santander_holdings import SantanderHolding, load_holdings
 from backend.core.santander_nav import fetch_share_values as fetch_santander_nav_values
 from backend.core.crypto_holdings import (

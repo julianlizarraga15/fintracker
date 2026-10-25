@@ -3,7 +3,8 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements-broker-lambda.txt .
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-broker-lambda.txt
 
 COPY backend /app/backend
 COPY infra/binance /app/infra/binance
