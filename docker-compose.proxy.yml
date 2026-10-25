@@ -1,0 +1,22 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: fintracker-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - default
+      - watering-proxy
+
+networks:
+  default:
+    external: true
+    name: fintracker_default
+  watering-proxy:
+    external: true
+    name: watering-proxy

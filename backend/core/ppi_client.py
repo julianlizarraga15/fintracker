@@ -21,7 +21,7 @@ def _build_ppi(sandbox: bool = False):
         from ppi_client.ppi_api_client import PPIClient
     except ImportError as exc:
         raise PPIAPIError(
-            "ppi-client is not installed. Run `pip install -r backend/requirements.txt` first."
+            "ppi-client is not installed. Run `pip install -r backend/requirements-broker-lambda.txt` first."
         ) from exc
     client = PPIClient(PPI.version, sandbox)
     rest_client = client.get_rest_client()

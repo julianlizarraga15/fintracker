@@ -3,46 +3,48 @@
 Personal finance tracker for pulling brokerage positions, computing valuations, and surfacing them through containerized services.
 
 ## Architecture
+
+See the [architecture overview](docs/architecture-overview.md) for the main components, their inputs and outputs, and the shared infrastructure with watering-system.
+
 - **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.daily_snapshot`. The API exposes `POST /auth/login` (JWT issuance backed by env-provided demo credentials) plus `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
 - **Frontend (`frontend/`)**: Static site served through Nginx that queries `/api/valuations/latest` and renders the latest snapshot (status chip, totals, grouped-by-symbol positions with per-custodian details, and % of portfolio per position) for a provided account id.
-- **Docker Compose (`docker-compose.yml`)**: Builds/runs backend, frontend, and Nginx reverse proxy with stable container names (e.g., `fintracker-backend`).
-- **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to load `.env` (when present) and run the snapshot job.
+- **Docker Compose**: `docker-compose.isolated.yml` manages the Fintracker backend and frontend. `docker-compose.proxy.yml` declares the Nginx proxy shared with watering-system. Both reuse the existing `fintracker_default` network; the proxy also joins `watering-proxy`.
+- **Automation (`scripts/run_valuations.sh`)**: Helper executed inside the backend container to run the snapshot job. Production disables dotenv and loads approved web configuration from SSM.
 - **Infrastructure**: Deployed to EC2; a systemd timer on the host runs `docker exec fintracker-backend /app/scripts/run_valuations.sh` daily at 16:00 UTC (13:00 UTC-3) to keep valuations up to date.
 
 ## Deploy (GitHub Actions + SSM)
-- CI/CD builds/pushes images to ECR, then SSM runs `git pull`, `docker-compose pull/down/up`, and restarts the stack on EC2. It sets `HOME=/home/ec2-user` and marks `/home/ec2-user/fintracker` as a Git safe.directory so pulls work.
-- On EC2, always run `docker-compose` from the repo root so the backend bind mount `./data:/app/data` is applied and snapshots write to disk.
+- CI/CD tests, builds, and pushes uniquely tagged images to ECR. SSM runs the reviewed `scripts/deploy_isolated_web.sh` from that exact commit and recreates only changed Fintracker services with the isolated Compose file.
+- Backend deployment pauses the valuation timer, drains the current job, acquires the shared job lock, and checks health before restoring the timer. The previous image remains available for rollback.
+- The release helper validates and reloads the existing Nginx proxy. Proxy recreation, network removal, Compose `down`, and orphan removal are outside this release path because watering-system shares the host and proxy. See [shared proxy operations](docs/shared-proxy.md).
 
 ### Loading secrets from SSM Parameter Store
 
 The web backend accepts only the explicit setting names in `backend/core/settings.py` under `/fintracker/web`. Create sensitive web settings such as `/fintracker/web/JWT_SECRET` as `SecureString` in the AWS console. Keep credential values out of CLI arguments and shell history.
 
-The backend loads `.env` first for local development, then fills missing values from SSM when `SSM_ENV_PATH` is set. On EC2, `.env` should contain only non-secret bootstrapping values, for example:
+On EC2, the backend uses the reviewed nonsecret `.isolation-bootstrap` file and disables dotenv. Its bootstrap includes:
 
 ```env
 SSM_ENV_PATH=/fintracker/web
 AWS_REGION=us-east-1
+AWS_DEFAULT_REGION=us-east-1
+PYTHON_DOTENV_DISABLED=1
 ```
 
 The EC2 instance role needs `ssm:GetParameters` for the exact approved web parameter names, plus a scoped decrypt grant if those parameters use a customer-managed KMS key. It must not have access to broker credentials. The backend refuses startup when old brokerage credentials are present in its environment.
 
-Deploy the isolated source functions and migrate configuration before deploying this backend version. Follow [the broker isolation runbook](docs/broker-credential-isolation.md); the old `/fintracker/prod` loading path is rejected.
+The production credential migration is complete. Follow [the broker isolation runbook](docs/broker-credential-isolation.md) for current deployment and rollback procedures. The old `/fintracker/prod` loading path is rejected.
 
-## Getting Started
-1. **Prerequisites**
-   - Docker / Docker Compose
-   - `.env` with broker credentials, AWS settings, etc. (see `.env.example`)
-2. **Local run**
-   ```bash
-   docker-compose up -d
-   docker-compose exec backend python -m backend.core.daily_snapshot
-   ```
-   Generated CSV/Parquet files land under `data/positions/...`.
-3. **Manual valuation run inside a container**
-   ```bash
-   docker exec fintracker-backend /app/scripts/run_valuations.sh
-   ```
-   The script ensures `.env` variables are loaded and is what automation invokes.
+## Getting started
+
+Use the browser workflow in [Testing](#testing) for a local app with synthetic data. Production uses the isolated release workflow described above. The old default `docker-compose.yml` and `scripts/local_build_and_up.sh` were retired because they used the legacy deployment path.
+
+To request a new production valuation, use the authenticated Jobs page. The existing scheduled service invokes the same helper inside the backend container:
+
+```bash
+docker exec fintracker-backend /app/scripts/run_valuations.sh
+```
+
+Generated CSV and Parquet files persist in the mounted `data/positions` directory. Do not put broker credentials in the web configuration.
 
 ## Inspecting Saved IOL Instrument Types
 
@@ -56,7 +58,7 @@ This prints the CSV path, symbols, and instrument labels without contacting IOL 
 
 ## Binance Spot Balances
 - Set `ENABLE_BINANCE=1` and `BINANCE_BALANCE_LAMBDA=fintracker-fetch-binance-balance` in approved web configuration. Binance credentials stay inside the existing reader in `sa-east-1`.
-- Run `python -m backend.core.daily_snapshot` (locally or via `docker compose exec backend ...`) to pull Binance spot balances alongside IOL and manual holdings.
+- Run the valuation helper inside the existing backend container to pull Binance spot balances alongside IOL and manual holdings.
 - Only spot balances are fetched; keep keys scoped accordingly.
 
 ## IOL Positions
@@ -72,7 +74,7 @@ This prints the CSV path, symbols, and instrument labels without contacting IOL 
 - This utility and daily snapshots invoke the fixed PPI reader. ARS valuation and local snapshot storage continue through the existing FX flow.
 
 ## MetaMask / Ethereum Wallet Balances
-- Enable with `.env`: set `ENABLE_ETHEREUM=true`, `ETHERSCAN_API_KEY`, and `ETHEREUM_WALLET_ADDRESSES` (comma-separated list of 0x... addresses).
+- In approved web configuration, set `ENABLE_ETHEREUM=true`, `ETHERSCAN_API_KEY`, and `ETHEREUM_WALLET_ADDRESSES` (comma-separated list of 0x... addresses).
 - Automatically fetches native ETH and ERC-20 token balances using the Etherscan API.
 - Token balances are automatically adjusted for decimals and priced alongside other crypto assets.
 
@@ -84,10 +86,6 @@ We now ship `scripts/fetch_santander_nav.py`, which mimics Santander's SPA API h
   python scripts/fetch_santander_nav.py 1 2
   ```
   Include any fund ids you track (defaults to `1`). The script prints `Fund <id>: <value> (as of <timestamp>)`.
-- **Inside backend container** (after `docker compose build backend` to copy the script):
-  ```bash
-  docker compose exec backend python /app/scripts/fetch_santander_nav.py 1
-  ```
 - The script sends Santander's required API headers (`channel-name`, `x-ibm-client-id`, `sec-fetch-*`, etc.) without preloading cookies from the info landing page. Plain `curl` without those headers is rejected with “Servicio temporalmente no disponible”, so always run this helper instead of hand-rolling the request.
 
 ### Santander funds inside the daily valuation flow
@@ -123,7 +121,7 @@ Backend tests live under `backend/tests/`. Run the suite in Docker so local runs
 scripts/run_tests_docker.sh
 ```
 
-This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
+This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. For native Linux tests, install `backend/requirements-test.txt` and run `scripts/run_tests.sh`. The public web image excludes worker dependencies and test tools.
 
 Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 
@@ -139,16 +137,7 @@ The authenticated job dashboard can also trigger an ad hoc valuation run with `P
 ## Public Demo Auth + TLS
 - **Configure secrets via env/secret store**: set `DEMO_AUTH_USERNAME`, `DEMO_AUTH_PASSWORD`, `JWT_SECRET`, and optionally override `JWT_EXPIRES_MINUTES` before the backend container boots. Keep these out of git and rotate `JWT_SECRET` if compromised.
 - **Frontend auth flow**: the SPA now shows a login form, calls `/api/auth/login`, keeps the JWT in `sessionStorage` for the current browser tab, attaches it to authenticated fetches, and clears it on any `401` so the user is prompted to log back in.
-- **Nginx with TLS**: the `nginx` service listens on `80` (HTTP) and `443` (HTTPS). Port 80 only redirects to HTTPS. Place your Let’s Encrypt certs/keys under `./tls` (ignored by git) so they mount at `/etc/nginx/tls/` and keep the actual domain (e.g., `$PUBLIC_DOMAIN`) outside of the repo. A typical host setup:
-  ```bash
-  export PUBLIC_DOMAIN=demo.example.com
-  sudo certbot certonly --standalone -d "$PUBLIC_DOMAIN"
-  sudo mkdir -p tls
-  sudo cp /etc/letsencrypt/live/"$PUBLIC_DOMAIN"/fullchain.pem tls/
-  sudo cp /etc/letsencrypt/live/"$PUBLIC_DOMAIN"/privkey.pem tls/
-  docker compose up -d nginx
-  ```
-  `nginx.conf` forwards `Authorization: Bearer ...` headers on `/api/` so the backend can verify JWTs.
+- **Nginx with TLS**: the shared `nginx` service listens on ports `80` and `443`. It mounts the existing host `/etc/letsencrypt` directory read-only. `nginx.conf` selects the existing Fintracker and watering certificates and forwards authorization headers on `/api/`. Preserve those mounts, certificates, and both external networks during maintenance. See [shared proxy operations](docs/shared-proxy.md) before changing the proxy.
 
 ## Roadmap / Next Steps
 - Frontend polish: filters, sortable columns, and lightweight charts on top of the existing snapshot view.
