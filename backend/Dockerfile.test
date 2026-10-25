@@ -6,6 +6,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend /app/backend
+COPY infra/binance /app/infra/binance
 COPY scripts /app/scripts
 
 ENV PYTHONPATH=/app

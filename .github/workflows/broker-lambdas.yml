@@ -2,6 +2,11 @@ name: Build broker Lambda image
 
 on:
   workflow_dispatch:
+    inputs:
+      audit_only:
+        description: Read deployment identity, quota and web policy metadata without building or deploying.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,7 +20,12 @@ env:
   ECR_REPOSITORY: fintracker-broker-sources
 
 jobs:
+  audit:
+    if: ${{ inputs.audit_only }}
+    uses: ./.github/workflows/broker-isolation-audit.yml
+    secrets: inherit
   build:
+    if: ${{ !inputs.audit_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,3 +53,39 @@ jobs:
           [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "Image URI: $ECR_REGISTRY/$ECR_REPOSITORY@$digest" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "BROKER_IMAGE_DIGEST=$digest" >> "$GITHUB_ENV"
+      - name: Scan pushed image
+        run: |
+          set -euo pipefail
+          scan_start_attempts=12
+          scan_start_delay_seconds=10
+          for ((attempt=1; attempt<=scan_start_attempts; attempt++)); do
+            if aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" \
+              --image-id "imageDigest=$BROKER_IMAGE_DIGEST" > broker-image-scan.json; then
+              break
+            fi
+            if ((attempt == scan_start_attempts)); then
+              exit 1
+            fi
+            sleep "$scan_start_delay_seconds"
+          done
+          scan_ready=0
+          aws ecr wait image-scan-complete --repository-name "$ECR_REPOSITORY" \
+            --image-id "imageDigest=$BROKER_IMAGE_DIGEST" && scan_ready=1
+          aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" \
+            --image-id "imageDigest=$BROKER_IMAGE_DIGEST" > broker-image-scan.json
+          jq '{imageId, imageScanStatus, counts: .imageScanFindings.findingSeverityCounts}' \
+            broker-image-scan.json >> "$GITHUB_STEP_SUMMARY"
+          [[ "$scan_ready" == 1 ]]
+          jq -e '.imageId.imageDigest == env.BROKER_IMAGE_DIGEST and
+            .imageScanStatus.status == "COMPLETE" and
+            (.imageScanFindings | type == "object") and
+            (.imageScanFindings.findingSeverityCounts | type == "object") and
+            ((.imageScanFindings.findingSeverityCounts.CRITICAL // 0) == 0) and
+            ((.imageScanFindings.findingSeverityCounts.HIGH // 0) == 0)' broker-image-scan.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: broker-image-scan
+          path: broker-image-scan.json
+          if-no-files-found: warn

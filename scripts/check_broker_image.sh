@@ -2,6 +2,9 @@
 set -euo pipefail
 
 image="${1:?Usage: scripts/check_broker_image.sh IMAGE}"
+docker run --rm --network none --entrypoint rpm "$image" -q \
+  system-release openssl-snapsafe-libs openssl-fips-provider-latest \
+  rpm rpm-libs pcre2 pcre2-syntax curl-minimal libcurl-minimal
 docker run --rm --network none --entrypoint python "$image" -c '
 import importlib.metadata
 import sys
