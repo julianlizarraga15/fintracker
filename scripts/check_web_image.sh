@@ -16,11 +16,11 @@ import time
 import urllib.error
 import urllib.request
 
-WORKER_ONLY_MODULES = (
+EXCLUDED_MODULES = (
     "backend.workers", "backend.tests", "backend.core.iol_client",
     "backend.core.ppi_client", "backend.core.iol_transform", "backend.core.ppi_transform",
     "backend.core.iol_utils", "backend.core.sources.iol", "backend.core.binance_client",
-    "ppi_client",
+    "ppi_client", "pytest", "httpx",
 )
 RUNTIME_SCRIPTS = {
     "run_valuations.sh", "run_valuations_with_status.sh", "check_broker_web_config.py",
@@ -30,8 +30,8 @@ HEALTH_POLL_SECONDS = 0.1
 HEALTH_REQUEST_TIMEOUT_SECONDS = 1
 SERVER_STOP_TIMEOUT_SECONDS = 5
 
-for module in WORKER_ONLY_MODULES:
-    assert importlib.util.find_spec(module) is None, "Worker-only module in web image: " + module
+for module in EXCLUDED_MODULES:
+    assert importlib.util.find_spec(module) is None, "Non-runtime module in web image: " + module
 try:
     importlib.metadata.version("ppi-client")
 except importlib.metadata.PackageNotFoundError:

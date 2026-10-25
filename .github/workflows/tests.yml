@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: docker compose --env-file /dev/null -p fintracker -f docker-compose.proxy.yml config --quiet
       - run: docker build -t fintracker-web-check -f backend/Dockerfile .
       - run: bash scripts/check_web_image.sh fintracker-web-check
 

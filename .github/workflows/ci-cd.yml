@@ -113,6 +113,7 @@ jobs:
           docker build --pull \
             -t "$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG" \
             -f backend/Dockerfile .
+          bash scripts/check_web_image.sh "$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG"
           docker push "$ECR_REGISTRY/$BACKEND_REPO:$RELEASE_TAG"
 
       - name: Build and push frontend image

@@ -3,6 +3,9 @@
 Personal finance tracker for pulling brokerage positions, computing valuations, and surfacing them through containerized services.
 
 ## Architecture
+
+See the [architecture overview](docs/architecture-overview.md) for the main components, their inputs and outputs, and the shared infrastructure with watering-system.
+
 - **Backend (`backend/`)**: FastAPI app plus snapshot utilities (`backend/core`) that fetch positions/prices/FX, compute valuations, and write CSV/Parquet files via `python -m backend.core.daily_snapshot`. The API exposes `POST /auth/login` (JWT issuance backed by env-provided demo credentials) plus `GET /valuations/latest?account_id=<hash>`, which streams the freshest on-disk valuation snapshot along with totals for the frontend.
 - **Frontend (`frontend/`)**: Static site served through Nginx that queries `/api/valuations/latest` and renders the latest snapshot (status chip, totals, grouped-by-symbol positions with per-custodian details, and % of portfolio per position) for a provided account id.
 - **Docker Compose**: `docker-compose.isolated.yml` manages the Fintracker backend and frontend. `docker-compose.proxy.yml` declares the Nginx proxy shared with watering-system. Both reuse the existing `fintracker_default` network; the proxy also joins `watering-proxy`.
@@ -118,7 +121,7 @@ Backend tests live under `backend/tests/`. Run the suite in Docker so local runs
 scripts/run_tests_docker.sh
 ```
 
-This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. If you are using a native Linux environment with dependencies installed, `scripts/run_tests.sh` runs the suite directly in local Python.
+This builds a dedicated test image with `backend/` and `scripts/`. The root `.dockerignore` excludes environment files, local financial data, and credentials from the build context. For native Linux tests, install `backend/requirements-test.txt` and run `scripts/run_tests.sh`. The public web image excludes worker dependencies and test tools.
 
 Browser workflows run against the real frontend and API with synthetic credentials and an isolated data directory. Install Node dependencies and Chromium with `npm install` and `npx playwright install --with-deps chromium`, then run `npm run test:e2e`. Playwright retains the HTML report, screenshots, videos, traces, backend log, and inspectable fixture data under `artifacts/e2e/`; the tests do not read `.env` or connect to external financial services.
 
