@@ -2,11 +2,11 @@
 
 Status: complete. The final production checkpoint below supersedes all earlier blocked or pre-cutover notes in this historical plan.
 
-Last updated: 2026-10-24.
+Last updated: 2026-10-25.
 
 ## Final production checkpoint, 2026-10-24
 
-Credential isolation is complete. The public backend was recreated from clean source with dotenv disabled and now reads `/fintracker/web` plus the IOL, PPI, and Binance reader Lambdas. The host `.env` was replaced from scratch with nonsecret bootstrap values without reading it. No `.env` contents were read during this work. Web CI/CD remains `disabled_manually`.
+Credential isolation is complete. The public backend was recreated from clean source with dotenv disabled and now reads `/fintracker/web` plus the IOL, PPI, and Binance reader Lambdas. The host `.env` was replaced from scratch with nonsecret bootstrap values without reading it. No `.env` contents were read during this work. The safe web CI/CD workflow was later enabled under the user's updated instruction and passed a controlled production deployment. See the current workflow checkpoint below and [the deployment evidence](../verification/20261025-web-cicd.json).
 
 The workers use `sha256:ab9bdf00f06e9d1e06dceed3acad7aa3fdd280b8cf84d1e539d2f0aee4e3e21b`; its exact-digest ECR basic scan completed with zero findings. Stack status is `UPDATE_COMPLETE`, regional quota is 1000 and the IOL/PPI functions each reserve one slot. Post-update authenticated worker reads passed, returning IOL 7 positions/7 prices and PPI 10/10. Log tails contained only system records. Basic ECR scanning does not establish Python dependency vulnerability coverage.
 
@@ -16,7 +16,13 @@ After replacement and financial equivalence passed, the old IOL/PPI parameters a
 
 Authenticated public HTTPS Refresh passed after cleanup. The systemd valuation service was manually invoked after cleanup and also passed. Position/quantity fingerprints, broker valuation fields, manual holdings, history, snapshots and price history matched or remained readable. A same-value manual update/readback passed without changing file bytes. The timer was active and enabled at the 2026-10-25 03:58 UTC check; its last trigger was before the cutover and the first post-cutover timer-triggered run is due 2026-10-25 16:00 UTC. Three unpriced Binance balances were present before the cutover and remain unpriced; no new job errors occurred in the verified runs. The backend suite passed 113 tests (nine existing warnings); GitHub Actions run 40118168893 passed backend, broker-package and browser checks.
 
-See [PROJECT_STATUS.md](../../PROJECT_STATUS.md), [sanitized cutover evidence](../verification/20261024-broker-cutover.json), [applied policy](../verification/20261024-web-runtime-policy.json), and [policy checks](../verification/20261024-web-iam-checks.json). Keep CI/CD disabled and use the explicit isolated Compose procedure in the runbook for future backend recreation. Do not restore broker credentials to EC2.
+See [PROJECT_STATUS.md](../../PROJECT_STATUS.md), [sanitized cutover evidence](../verification/20261024-broker-cutover.json), [applied policy](../verification/20261024-web-runtime-policy.json), and [policy checks](../verification/20261024-web-iam-checks.json). Keep the isolated CI/CD workflow enabled for future web releases. Use the explicit isolated Compose procedure in the runbook only for manual backend recreation. Do not restore broker credentials to EC2.
+
+## Web deployment checkpoint, 2026-10-25
+
+The user authorized enabling the safe replacement workflow after the earlier disabled state. GitHub reported `ci-cd` active. Production run [40164105266](https://github.com/julianlizarraga15/fintracker/actions/runs/40164105266) completed successfully on `12aa6c3d6cdd2198a10267902241523546d95d3c`. It passed the shared quality jobs, built and deployed the selected web services, and did not use the legacy Compose path.
+
+After deployment, the runtime configuration probe found no broker credentials and the expected `/fintracker/web` path. Public health returned HTTP 200. Authenticated Refresh completed with zero errors, uploaded output to S3, and preserved readable manual holdings, history, and price history. The timer was active and enabled at the 05:07 UTC check. Its first automatic post-cutover valuation was still due at 16:00 UTC and had not yet been observed. The current session has no AWS CLI credentials, so a later timer check remains to be recorded separately.
 
 ## Historical deployment checkpoint (superseded by final production checkpoint above)
 
@@ -266,7 +272,7 @@ Temporary exploration artifacts exist under `/tmp/fintracker-secret-isolation/`,
 
 ## Follow-up
 
-No AWS login or cutover prerequisite remains. Keep web CI/CD disabled. Treat credential rotation as a separate decision for the credential owner; preserve safe reader versions, the prior worker image, and complete snapshots for rollback. Continue to avoid `.env` reads and never restore broker credentials to EC2.
+No credential-isolation cutover prerequisite remains. The isolated web CI/CD workflow is active and has passed a production deployment. The first timer-triggered valuation after that deployment remained pending at the last AWS check. Treat credential rotation as a separate decision for the credential owner; preserve safe reader versions, the prior worker image, and complete snapshots for rollback. Continue to avoid `.env` reads and never restore broker credentials to EC2.
 
 ## Supporting references
 

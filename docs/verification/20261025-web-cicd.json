@@ -1,9 +1,9 @@
 {
   "date": "2026-10-25",
   "workflow": ".github/workflows/ci-cd.yml",
-  "state": "disabled_manually",
-  "live_state_checked_at": "2026-10-25T04:59:28Z",
-  "replacement_status": "merged_in_PR_22; not activated; not deployed",
+  "state": "active",
+  "live_state_checked_at": "2026-10-25T05:07:27Z",
+  "replacement_status": "merged_in_PR_22; explicitly activated; production deployment succeeded",
   "triggers": {
     "push": "main, application/deployment inputs only",
     "workflow_dispatch": "main only"
@@ -40,12 +40,51 @@
     "mocked_ssm_payload_and_terminal_poll": "passed",
     "production_host_compose_config_with_explicit_dev_null_env": "passed",
     "independent_review": "no blocking findings",
-    "production_deployment_attempted": false,
+    "production_deployment_attempted": true,
+    "production_run": {
+      "id": "40164105266",
+      "url": "https://github.com/julianlizarraga15/fintracker/actions/runs/40164105266",
+      "head_sha": "12aa6c3d6cdd2198a10267902241523546d95d3c",
+      "jobs": {
+        "changes": "success",
+        "quality_backend": "success",
+        "quality_browser": "success",
+        "quality_broker_package": "success",
+        "build": "success",
+        "deploy": "success"
+      },
+      "backend_image_id": "sha256:2b90c63322b6b8e05722b9ea2ce73bef94753ccdb4103eab779f39d8ead512ad",
+      "frontend_image_id": "sha256:0518c78814489b39eeb2efb135fe0285634cf7266ab6b812b8c5eeade2546461",
+      "runtime_configuration_valid": true,
+      "broker_credentials_present": false,
+      "web_ssm_path_valid": true,
+      "public_health_http_status": 200,
+      "authenticated_refresh": {
+        "success": true,
+        "error_count": 0,
+        "output_categories": 4,
+        "s3_upload": true,
+        "source_counts": {
+          "iol": 7,
+          "ppi": 10,
+          "binance": 6
+        },
+        "manual_count": 2,
+        "history_count": 14,
+        "price_history_readable": true
+      },
+      "timer_at_2026_10_25T05_07_27Z": {
+        "active": true,
+        "enabled": true,
+        "next_run": "2026-10-25T16:00:00Z",
+        "first_post_cutover_timer_run_observed": false
+      }
+    },
     "mocked_safe_pre_mutation_timer_restore": "passed"
   },
   "limits": [
-    "The replacement workflow has not been enabled or run against production.",
-    "Mocked rollback and SSM cancellation checks are not live AWS execution proof.",
-    "No production image was built or pushed by this branch."
+    "The first automatic timer-triggered valuation after this deployment was pending at the last recorded AWS check.",
+    "AWS CLI credentials are unavailable in the current session, so timer state has not been rechecked after 2026-10-25T05:07:27Z.",
+    "The production deployment used the merged workflow commit; it was not built from the current documentation branch."
   ]
 }
