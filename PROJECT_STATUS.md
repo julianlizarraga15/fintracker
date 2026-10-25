@@ -12,7 +12,7 @@ Updated 2026-10-24. **Production cutover complete and verified.** Public web Ref
 - Authenticated public HTTPS Refresh succeeded after cleanup and backend recreation. A scheduled systemd valuation also completed successfully. Both preserved all source position/quantity fingerprints, existing manual holdings, valuation history and price history; broker valuation fields matched the pre-cutover baseline. A same-value manual update/readback passed and preserved original file bytes. No financial amounts or hashes are stored in these public artifacts.
 - The valuation timer is active and enabled; next run is 2026-10-25 16:00 UTC. Existing three unpriced Binance balances remained unpriced as in the baseline; they caused no new job errors.
 - Binance code is wrapped by a fail-closed response/log guard. Read-only API capability checks confirmed trading, withdrawals, futures and transfer permissions are disabled. Existing legacy balance results matched the replacement. No keys were rotated.
-- Backend suite: 113 passed, with nine existing deprecation warnings. CI run [40118168893](https://github.com/julianlizarraga15/fintracker/actions/runs/40118168893) passed backend, broker package and browser checks. PR 21 remains open for review. Do not enable the web CI/CD workflow as part of routine release steps.
+- Backend suite: 113 passed, with nine existing deprecation warnings. CI run [40118168893](https://github.com/julianlizarraga15/fintracker/actions/runs/40118168893) passed backend, broker package and browser checks. PR 21 passed all three required checks. Keep the web CI/CD workflow disabled unless the user explicitly changes that instruction.
 
 ## Durable evidence
 
