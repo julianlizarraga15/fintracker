@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.app.security import require_jwt
+from backend.core import config
 from backend.app.valuations import (
     LatestValuationResponse,
     SnapshotNotFound,
@@ -17,6 +18,8 @@ def latest_valuations(
     ),
     _: dict = Depends(require_jwt),
 ):
+    if account_id != config.ACCOUNT_ID:
+        raise HTTPException(status_code=403, detail="Account access denied.")
     try:
         return get_latest_valuation_snapshot(account_id=account_id)
     except SnapshotNotFound as exc:

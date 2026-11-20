@@ -62,6 +62,32 @@ def test_login_and_manual_holdings_http_workflow(client):
     assert client.get("/manual/crypto-holdings", headers=headers).json() == saved.json()
 
 
+def test_login_rejects_rate_limited_client(client, monkeypatch):
+    from backend.app.routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router, "allow_login_attempt", lambda client_key: False)
+
+    response = client.post("/auth/login", json={"username": "demo", "password": "secret"})
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too many login attempts."
+
+
+def test_login_rate_limit_expires_after_its_window(monkeypatch):
+    from backend.app import login_rate_limit
+
+    now = [100.0]
+    monkeypatch.setattr(login_rate_limit, "monotonic", lambda: now[0])
+    client_key = "rate-limit-window-test"
+
+    for _ in range(login_rate_limit.MAX_LOGIN_ATTEMPTS):
+        assert login_rate_limit.allow_login_attempt(client_key)
+    assert not login_rate_limit.allow_login_attempt(client_key)
+
+    now[0] += login_rate_limit.ATTEMPT_WINDOW_SECONDS
+    assert login_rate_limit.allow_login_attempt(client_key)
+
+
 def test_health_and_protected_api_routes_are_reachable(client):
     assert client.get("/health").json() == {"ok": True}
     for path in (
@@ -109,6 +135,12 @@ def test_latest_valuation_http_response_reads_snapshot_file(client, monkeypatch,
     assert body["totals"]["positions"] == 2
     assert body["rows"][0]["symbol"] == "BTC"
     assert body["rows"][1]["status"] == "missing_price"
+
+    other_account = client.get(
+        "/valuations/latest?account_id=another-account",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert other_account.status_code == 403
 
 
 def test_job_trigger_http_status_and_conflict(client, monkeypatch):
