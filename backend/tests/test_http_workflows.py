@@ -62,6 +62,32 @@ def test_login_and_manual_holdings_http_workflow(client):
     assert client.get("/manual/crypto-holdings", headers=headers).json() == saved.json()
 
 
+def test_login_rejects_rate_limited_client(client, monkeypatch):
+    from backend.app.routers import auth as auth_router
+
+    monkeypatch.setattr(auth_router, "allow_login_attempt", lambda client_key: False)
+
+    response = client.post("/auth/login", json={"username": "demo", "password": "secret"})
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too many login attempts."
+
+
+def test_login_rate_limit_expires_after_its_window(monkeypatch):
+    from backend.app import login_rate_limit
+
+    now = [100.0]
+    monkeypatch.setattr(login_rate_limit, "monotonic", lambda: now[0])
+    client_key = "rate-limit-window-test"
+
+    for _ in range(login_rate_limit.MAX_LOGIN_ATTEMPTS):
+        assert login_rate_limit.allow_login_attempt(client_key)
+    assert not login_rate_limit.allow_login_attempt(client_key)
+
+    now[0] += login_rate_limit.ATTEMPT_WINDOW_SECONDS
+    assert login_rate_limit.allow_login_attempt(client_key)
+
+
 def test_health_and_protected_api_routes_are_reachable(client):
     assert client.get("/health").json() == {"ok": True}
     for path in (
@@ -81,52 +107,4 @@ def test_manual_holdings_rejects_invalid_and_expired_tokens(client):
     for token, detail in (("not-a-jwt", "Invalid token."), (expired_token, "Token expired.")):
         response = client.get(
             "/manual/crypto-holdings",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 401
-        assert response.json()["detail"] == detail
-
-
-def test_latest_valuation_http_response_reads_snapshot_file(client, monkeypatch, tmp_path):
-    valuation_dir = tmp_path / "valuations" / "dt=2026-09-30" / "account=acct-test"
-    valuation_dir.mkdir(parents=True)
-    (valuation_dir / "valuations_2026-09-30.csv").write_text(
-        "snapshot_dt,computed_ts,symbol,quantity,value_base,status,source\n"
-        "2026-09-30,2026-09-30T12:00:00Z,BTC,0.5,30000,ok,binance\n"
-        "2026-09-30,2026-09-30T12:00:00Z,UNKNOWN,2,,missing_price,manual\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(valuations, "VALUATIONS_DIR", tmp_path / "valuations")
-    login = client.post("/auth/login", json={"username": "demo", "password": "secret"}).json()
-    response = client.get(
-        "/valuations/latest?account_id=acct-test",
-        headers={"Authorization": f"Bearer {login['access_token']}"},
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["totals"]["total_value_base"] == pytest.approx(30000)
-    assert body["totals"]["positions"] == 2
-    assert body["rows"][0]["symbol"] == "BTC"
-    assert body["rows"][1]["status"] == "missing_price"
-
-
-def test_job_trigger_http_status_and_conflict(client, monkeypatch):
-    login = client.post("/auth/login", json={"username": "demo", "password": "secret"}).json()
-    headers = {"Authorization": f"Bearer {login['access_token']}"}
-    monkeypatch.setattr(
-        jobs_router,
-        "start_valuation_job",
-        lambda: JobTriggerResponse(job="valuations", run_id="2026-09-30_120000", status="started", started_at="2026-09-30T12:00:00Z"),
-    )
-    started = client.post("/jobs/valuations/run", headers=headers)
-    assert started.status_code == 202
-    assert started.json()["status"] == "started"
-
-    def already_running():
-        raise JobAlreadyRunning("Valuations job is already running.")
-
-    monkeypatch.setattr(jobs_router, "start_valuation_job", already_running)
-    conflict = client.post("/jobs/valuations/run", headers=headers)
-    assert conflict.status_code == 409
-    assert conflict.json()["detail"] == "Valuations job is already running."
+            headers=

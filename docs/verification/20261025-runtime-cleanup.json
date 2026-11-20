@@ -1,6 +1,6 @@
 {
   "date": "2026-10-25",
-  "status": "web_runtime_cleanup_deployed; live_artifact_housekeeping_pending_authentication",
+  "status": "web_runtime_cleanup_deployed; host_legacy_files_retired; live_valuation_passed",
   "pull_request": "https://github.com/julianlizarraga15/fintracker/pull/26",
   "source_commit": "c50fa5758f2bf8ff27a95edccfe56e5a812f1c44",
   "verification": {
@@ -43,16 +43,27 @@
   ],
   "replacement_shared_proxy_manifest": "docker-compose.proxy.yml",
   "live_cleanup": {
-    "aws_authentication": "previous temporary session logged out; renewed login expired without authorization",
-    "container_identity_inventory": "pending",
-    "host_legacy_file_retirement": "not performed",
-    "docker_image_and_stopped_container_deletion": "not performed",
-    "ecr_image_deletion": "not performed",
-    "post_cleanup_authenticated_live_valuation": "pending"
+    "aws_authentication": "temporary root session authorized 2026-10-25T23:19Z",
+    "container_identity_inventory": "four running containers: fintracker-backend, fintracker-frontend, fintracker-nginx, watering-backend-1",
+    "host_legacy_file_retirement": "removed docker-compose.yml and scripts/local_build_and_up.sh after placing and validating docker-compose.proxy.yml",
+    "docker_image_and_stopped_container_deletion": "removed untagged local fintracker images only; running, rollback, latest, watering, nginx, and python images kept; no stopped containers",
+    "ecr_image_deletion": "no untagged images in fintracker-backend or fintracker-frontend; tagged images kept, including current and previous releases",
+    "post_cleanup_authenticated_live_valuation": "run 2026-10-25_232545 succeeded with exit 0, 0 errors, 33 positions, valuations saved, S3 uploaded; timer remained active"
   },
   "limits": [
     "Public HTTP checks do not establish unchanged container identities or a successful new financial valuation.",
     "Host and ECR artifact deletion requires a fresh inventory and retention of active resources and safe rollback images.",
     "The existing shared proxy reload remains a shared operation for Fintracker and watering-system."
-  ]
+  ],
+  "security_update_2026_11_18": {
+    "change": "shared proxy upgraded from nginx:alpine (1.31.6) to nginx:1.31.9-alpine pinned by digest sha256:90b6bd2aec278b16b98221d64deb1d6d35d164567f507ab0716e6053878315aa",
+    "http2": "disabled on public TLS listener; both public sites negotiated HTTP/1.1 when tested with HTTP/2 requested",
+    "nginx_config_test": "passed",
+    "fintracker_http_after_change": 200,
+    "watering_root_http_after_change": 200,
+    "valuation_timer": "active and enabled",
+    "latest_valuation_service_result": "success, exit status 0",
+    "application_container_recreation": "none; only shared nginx proxy was replaced",
+    "evidence": "AWS SSM RunShellScript and public HTTPS checks, 2026-11-18 UTC"
+  }
 }

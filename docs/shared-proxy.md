@@ -2,7 +2,7 @@
 
 Fintracker and watering-system share the EC2 host and the `fintracker-nginx` container. The tracked `docker-compose.proxy.yml` declares that existing proxy separately from the Fintracker web services in `docker-compose.isolated.yml`.
 
-The proxy keeps its existing image, container name, ports, Nginx configuration mount, and read-only `/etc/letsencrypt` mount. It joins the existing external networks `fintracker_default` and `watering-proxy`. The proxy manifest does not create or own either network. `nginx.conf` sends Fintracker requests to `backend` and `frontend`, and watering requests to `watering-backend`.
+The proxy image is pinned to Nginx 1.31.9 Alpine by digest. HTTP/2 is disabled in the tracked configuration. The proxy keeps its existing container name, ports, Nginx configuration mount, and read-only `/etc/letsencrypt` mount. It joins the existing external networks `fintracker_default` and `watering-proxy`. The proxy manifest does not create or own either network. `nginx.conf` sends Fintracker requests to `backend` and `frontend`, and watering requests to `watering-backend`.
 
 ## Validate the explicit proxy manifest
 
