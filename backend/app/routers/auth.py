@@ -1,14 +1,18 @@
 import hmac
+import ipaddress
+import socket
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.app.login_rate_limit import allow_login_attempt
 from backend.app.security import _detect_account_id, _issue_token, _jwt_expires_seconds
 from backend.core import config
 from backend.core.config import Settings
 
 router = APIRouter()
+TRUSTED_PROXY_HOSTNAME = "fintracker-nginx"
 
 
 class LoginRequest(BaseModel):
@@ -42,13 +46,39 @@ def _ensure_auth_configured(settings: Settings | None = None) -> None:
         raise HTTPException(status_code=500, detail="JWT secret is not configured.")
 
 
+def _client_key(request: Request) -> str:
+    peer = request.client.host if request.client else "unknown"
+    try:
+        peer_ip = ipaddress.ip_address(peer).compressed
+    except ValueError:
+        return peer
+    try:
+        proxy_ips = {
+            ipaddress.ip_address(record[4][0]).compressed
+            for record in socket.getaddrinfo(TRUSTED_PROXY_HOSTNAME, None, type=socket.SOCK_STREAM)
+        }
+    except (OSError, ValueError):
+        proxy_ips = set()
+    if peer_ip not in proxy_ips:
+        return peer_ip
+
+    forwarded_ip = request.headers.get("x-real-ip", "")
+    try:
+        return ipaddress.ip_address(forwarded_ip).compressed
+    except ValueError:
+        return peer_ip
+
+
 @router.post("/auth/login", response_model=LoginResponse)
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, request: Request):
     _ensure_auth_configured()
+    client_key = _client_key(request)
+    if not allow_login_attempt(client_key):
+        raise HTTPException(status_code=429, detail="Too many login attempts.")
     username = _demo_auth_username()
     password = _demo_auth_password()
-    username_valid = hmac.compare_digest(payload.username, username or "")
-    password_valid = hmac.compare_digest(payload.password, password or "")
+    username_valid = hmac.compare_digest(payload.username.encode("utf-8"), (username or "").encode("utf-8"))
+    password_valid = hmac.compare_digest(payload.password.encode("utf-8"), (password or "").encode("utf-8"))
     if not (username_valid and password_valid):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     return LoginResponse(

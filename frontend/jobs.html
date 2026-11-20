@@ -303,7 +303,7 @@
         historyBody: document.getElementById("history-body"),
       };
 
-      const authState = { token: null, expiresAt: 0 };
+      const authState = { token: null, expiresAt: 0, accountId: null };
       const AUTH_STORAGE_KEY = "fintracker.auth";
       const HOUR_MS = 60 * 60 * 1000;
       const JOB_STALE_AFTER_HOURS = 36;
@@ -333,6 +333,7 @@
       function clearAuthState() {
         authState.token = null;
         authState.expiresAt = 0;
+        authState.accountId = null;
         clearStoredAuth();
       }
 
@@ -340,7 +341,7 @@
         try {
           sessionStorage.setItem(
             AUTH_STORAGE_KEY,
-            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt })
+            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt, accountId: authState.accountId })
           );
         } catch (error) {
           console.warn("Unable to save auth state for this browser session.", error);
@@ -354,12 +355,14 @@
           const savedAuth = JSON.parse(rawAuth);
           const token = typeof savedAuth.token === "string" ? savedAuth.token : "";
           const expiresAt = Number(savedAuth.expiresAt) || 0;
-          if (!token || expiresAt <= Date.now()) {
+          const accountId = typeof savedAuth.accountId === "string" ? savedAuth.accountId.trim() : "";
+          if (!token || expiresAt <= Date.now() || !accountId) {
             clearAuthState();
             return false;
           }
           authState.token = token;
           authState.expiresAt = expiresAt;
+          authState.accountId = accountId;
           return true;
         } catch (error) {
           clearAuthState();
@@ -428,8 +431,11 @@
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.detail || "Login failed.");
+          const accountId = typeof payload.account_id === "string" ? payload.account_id.trim() : "";
+          if (!accountId) throw new Error("No authorized account was returned.");
           authState.token = payload.access_token;
           authState.expiresAt = Date.now() + (Number(payload.expires_in) || 0) * 1000;
+          authState.accountId = accountId;
           persistAuthState();
           dom.password.value = "";
           setFeedback("Authenticated. Loading job dashboard…", "success");

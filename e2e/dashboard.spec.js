@@ -85,12 +85,15 @@ test('login, inspect portfolio, and persist shared manual crypto edits', async (
   expect(preservedAccountId).toBe('other-account');
 });
 
-test('restored session loads saved account and account switching clears prior rows', async ({ page }) => {
+test('restored session stays on its assigned account and rejects account switching', async ({ page }) => {
   await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('fintracker.accountId', 'other-account'));
+  await page.reload();
   await page.locator('#login-username').fill('demo');
   await page.locator('#login-password').fill('test-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('#rows-body')).toContainText('BTC');
+  await expect(page.locator('#account-id')).toHaveValue('c61899e0');
   await page.reload();
   await expect(page.locator('#total-value')).toContainText('30,000');
   await expect(page.locator('#rows-body')).toContainText('BTC');
@@ -102,13 +105,10 @@ test('restored session loads saved account and account switching clears prior ro
   await page.getByRole('button', { name: 'Edit account' }).click();
   await page.locator('#account-id-dialog').fill('other-account');
   await page.getByRole('button', { name: 'Load account' }).click();
-  await expect(page.locator('#total-value')).toContainText('5,000');
-  await expect(page.locator('#rows-body')).toContainText('ALT');
-  await expect(page.locator('#rows-body')).not.toContainText('BTC');
-  await page.getByRole('button', { name: 'Edit account' }).click();
-  await page.locator('#account-id-dialog').fill('missing-account');
-  await page.getByRole('button', { name: 'Load account' }).click();
-  await expect(page.locator('#rows-body')).toContainText('No snapshot is available');
+  await expect(page.locator('#feedback')).toContainText('only access its assigned account');
+  await expect(page.locator('#account-id')).toHaveValue('c61899e0');
+  await expect(page.locator('#total-value')).toContainText('30,000');
+  await expect(page.locator('#rows-body')).toContainText('BTC');
   await expect(page.locator('#rows-body')).not.toContainText('ALT');
 });
 
@@ -131,7 +131,7 @@ test('late manual 401 after sign out does not expire a newer session state', asy
 
 test('expired bearer token clears the session and asks for login', async ({ page }) => {
   await page.goto('/');
-  await page.evaluate(() => sessionStorage.setItem('fintracker.auth', JSON.stringify({ token: 'expired-token', expiresAt: Date.now() + 60_000 })));
+  await page.evaluate(() => sessionStorage.setItem('fintracker.auth', JSON.stringify({ token: 'expired-token', expiresAt: Date.now() + 60_000, accountId: 'c61899e0' })));
   await page.route('**/api/manual/crypto-holdings', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Token expired.' }) }));
   await page.reload();
   await expect(page.locator('#login-feedback')).toContainText('Session expired');
@@ -148,4 +148,7 @@ test('job health displays recorded history and reports an active run conflict', 
 
   await page.getByRole('button', { name: 'Run now' }).click();
   await expect(page.locator('#feedback')).toContainText('already running');
+  await page.goto('/');
+  await expect(page.locator('#total-value')).toContainText('30,000');
+  await expect(page.locator('#rows-body')).toContainText('BTC');
 });
