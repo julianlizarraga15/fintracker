@@ -1,20 +1,28 @@
 from __future__ import annotations
 
 import json
+import socket
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
+from backend.app import login_rate_limit
 from backend.app import valuations
 from backend.app.main import app
 from backend.app.job_trigger import JobAlreadyRunning, JobTriggerResponse
+from backend.app.routers import auth as auth_router
 from backend.app.routers import jobs as jobs_router
 from backend.core import config
 
 EXPIRED_TOKEN_AGE_MINUTES = 1
+TEST_PROXY_IP = "172.30.0.2"
+TEST_UNTRUSTED_PEER_IP = "172.30.0.3"
+TEST_VISITOR_IP = "198.51.100.42"
+TEST_PEER_PORT = 12345
 
 
 @pytest.fixture
@@ -74,8 +82,6 @@ def test_login_rejects_rate_limited_client(client, monkeypatch):
 
 
 def test_login_rate_limit_expires_after_its_window(monkeypatch):
-    from backend.app import login_rate_limit
-
     now = [100.0]
     monkeypatch.setattr(login_rate_limit, "monotonic", lambda: now[0])
     client_key = "rate-limit-window-test"
@@ -86,6 +92,27 @@ def test_login_rate_limit_expires_after_its_window(monkeypatch):
 
     now[0] += login_rate_limit.ATTEMPT_WINDOW_SECONDS
     assert login_rate_limit.allow_login_attempt(client_key)
+
+
+def test_login_rate_limit_trusts_forwarded_ip_only_from_nginx(monkeypatch):
+    def resolve_proxy(host, *args, **kwargs):
+        assert host == auth_router.TRUSTED_PROXY_HOSTNAME
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (TEST_PROXY_IP, 0))]
+
+    monkeypatch.setattr(auth_router.socket, "getaddrinfo", resolve_proxy)
+    trusted_request = Request({
+        "type": "http",
+        "headers": [(b"x-real-ip", TEST_VISITOR_IP.encode())],
+        "client": (TEST_PROXY_IP, TEST_PEER_PORT),
+    })
+    untrusted_request = Request({
+        "type": "http",
+        "headers": [(b"x-real-ip", TEST_VISITOR_IP.encode())],
+        "client": (TEST_UNTRUSTED_PEER_IP, TEST_PEER_PORT),
+    })
+
+    assert auth_router._client_key(trusted_request) == TEST_VISITOR_IP
+    assert auth_router._client_key(untrusted_request) == TEST_UNTRUSTED_PEER_IP
 
 
 def test_health_and_protected_api_routes_are_reachable(client):

@@ -1,4 +1,6 @@
 import hmac
+import ipaddress
+import socket
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -10,6 +12,7 @@ from backend.core import config
 from backend.core.config import Settings
 
 router = APIRouter()
+TRUSTED_PROXY_HOSTNAME = "fintracker-nginx"
 
 
 class LoginRequest(BaseModel):
@@ -44,7 +47,26 @@ def _ensure_auth_configured(settings: Settings | None = None) -> None:
 
 
 def _client_key(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else "unknown"
+    try:
+        peer_ip = ipaddress.ip_address(peer).compressed
+    except ValueError:
+        return peer
+    try:
+        proxy_ips = {
+            ipaddress.ip_address(record[4][0]).compressed
+            for record in socket.getaddrinfo(TRUSTED_PROXY_HOSTNAME, None, type=socket.SOCK_STREAM)
+        }
+    except (OSError, ValueError):
+        proxy_ips = set()
+    if peer_ip not in proxy_ips:
+        return peer_ip
+
+    forwarded_ip = request.headers.get("x-real-ip", "")
+    try:
+        return ipaddress.ip_address(forwarded_ip).compressed
+    except ValueError:
+        return peer_ip
 
 
 @router.post("/auth/login", response_model=LoginResponse)

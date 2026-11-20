@@ -560,6 +560,7 @@
       const authState = {
         token: null,
         expiresAt: 0,
+        accountId: null,
       };
 
       function escapeHtml(value) {
@@ -620,7 +621,7 @@
         try {
           sessionStorage.setItem(
             AUTH_STORAGE_KEY,
-            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt })
+            JSON.stringify({ token: authState.token, expiresAt: authState.expiresAt, accountId: authState.accountId })
           );
         } catch (error) {
           console.warn("Unable to save auth state for this browser session.", error);
@@ -634,12 +635,14 @@
           const savedAuth = JSON.parse(rawAuth);
           const token = typeof savedAuth.token === "string" ? savedAuth.token : "";
           const expiresAt = Number(savedAuth.expiresAt) || 0;
-          if (!token || expiresAt <= Date.now()) {
+          const accountId = typeof savedAuth.accountId === "string" ? savedAuth.accountId.trim() : "";
+          if (!token || expiresAt <= Date.now() || !accountId) {
             clearStoredAuth();
             return false;
           }
           authState.token = token;
           authState.expiresAt = expiresAt;
+          authState.accountId = accountId;
           return true;
         } catch (error) {
           clearStoredAuth();
@@ -652,6 +655,7 @@
         if (snapshotController) snapshotController.abort();
         authState.token = null;
         authState.expiresAt = 0;
+        authState.accountId = null;
         clearStoredAuth();
         priceHistoryCache.clear();
         lastBaseCurrency = "";
@@ -691,29 +695,23 @@
             const detail = payload && payload.detail;
             throw new Error(detail || "Login failed.");
           }
+          const accountId = typeof payload.account_id === "string" ? payload.account_id.trim() : "";
+          if (!accountId) throw new Error("No authorized account was returned.");
           authState.token = payload.access_token;
           const expiresInSeconds = Number(payload.expires_in) || 0;
           authState.expiresAt = Date.now() + expiresInSeconds * 1000;
+          authState.accountId = accountId;
           requestGeneration += 1;
           persistAuthState();
+          dom.accountInput.value = accountId;
+          localStorage.setItem(STORAGE_KEY, accountId);
           dom.loginPanel.hidden = true;
           dom.workspace.hidden = false;
           setLoginFeedback("Authenticated.", "success");
           setStatus("Authenticated", "ready");
           loadManualCryptoHoldings();
-          const detectedAccountId = (payload.account_id || "").trim();
-          let accountIdToLoad = dom.accountInput.value.trim();
-          if (!accountIdToLoad && detectedAccountId) {
-            dom.accountInput.value = detectedAccountId;
-            localStorage.setItem(STORAGE_KEY, detectedAccountId);
-            setFeedback("Detected account id from login. Loading snapshot…", "success");
-            accountIdToLoad = detectedAccountId;
-          }
-          if (accountIdToLoad) {
-            loadSnapshot(accountIdToLoad);
-          } else {
-            setFeedback("Authenticated. Enter an account id to load a snapshot.");
-          }
+          setFeedback("Loading your account snapshot…", "success");
+          loadSnapshot(accountId);
         } catch (error) {
           clearAuthState();
           setStatus("Auth failed", "error");
@@ -1860,6 +1858,11 @@
           return;
         }
         const normalizedAccount = accountId.trim();
+        if (authState.accountId && normalizedAccount !== authState.accountId) {
+          dom.accountInput.value = authState.accountId;
+          setFeedback("This login can only access its assigned account.", "error");
+          return;
+        }
         const switchingAccount = latestValuationPayload && latestValuationPayload.account_id !== normalizedAccount;
         if (!latestValuationPayload || switchingAccount) clearSnapshotForSwitch(normalizedAccount);
         if (snapshotController) snapshotController.abort();
@@ -1939,6 +1942,11 @@
           setFeedback("Please enter an account id.", "error");
           return;
         }
+        if (accountId !== authState.accountId) {
+          dom.accountInput.value = authState.accountId || "";
+          setFeedback("This login can only access its assigned account.", "error");
+          return;
+        }
         loadSnapshot(accountId);
       });
 
@@ -2006,9 +2014,14 @@
         const accountId = dom.accountDialogInput.value.trim();
         if (!accountId) return;
         if (manualDirty && !window.confirm("Discard unsaved manual holdings changes before changing accounts?")) return;
+        if (accountId !== authState.accountId) {
+          dom.accountDialogInput.value = authState.accountId || "";
+          closeAccountDialog();
+          setFeedback("This login can only access its assigned account.", "error");
+          return;
+        }
         dom.accountInput.value = accountId;
         closeAccountDialog();
-        localStorage.setItem(STORAGE_KEY, accountId);
         loadSnapshot(accountId);
       });
 
@@ -2072,31 +2085,21 @@
       (function bootstrap() {
         const restoredAuth = restoreAuthState();
         const savedAccount = localStorage.getItem(STORAGE_KEY);
-        if (savedAccount) {
-          dom.accountInput.value = savedAccount;
-          if (restoredAuth) {
-            dom.loginPanel.hidden = true;
-            dom.workspace.hidden = false;
-            setLoginFeedback("Authenticated for this browser session.", "success");
-            setStatus("Authenticated", "ready");
-            setFeedback("Loading the saved account snapshot…");
-            loadManualCryptoHoldings();
-            loadSnapshot(savedAccount);
-          } else {
-            setFeedback("Account ID restored. Sign in to load its latest snapshot.");
-          }
-        } else {
-          if (restoredAuth) {
-            dom.loginPanel.hidden = true;
-            dom.workspace.hidden = false;
-            setLoginFeedback("Authenticated for this browser session.", "success");
-            setStatus("Authenticated", "ready");
-            setFeedback("Choose Account to enter an account ID.");
-            loadManualCryptoHoldings();
-          } else {
-            setFeedback("Sign in to load a snapshot.");
-          }
+        if (savedAccount) dom.accountInput.value = savedAccount;
+        if (!restoredAuth) {
+          setFeedback(savedAccount ? "Account ID restored. Sign in to load your snapshot." : "Sign in to load a snapshot.");
+          return;
         }
+
+        dom.accountInput.value = authState.accountId;
+        localStorage.setItem(STORAGE_KEY, authState.accountId);
+        dom.loginPanel.hidden = true;
+        dom.workspace.hidden = false;
+        setLoginFeedback("Authenticated for this browser session.", "success");
+        setStatus("Authenticated", "ready");
+        setFeedback("Loading your account snapshot…");
+        loadManualCryptoHoldings();
+        loadSnapshot(authState.accountId);
       })();
 
       dom.rowsBody.addEventListener("click", (event) => {
