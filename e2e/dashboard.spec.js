@@ -57,7 +57,19 @@ test('login, inspect portfolio, and persist shared manual crypto edits', async (
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize().width);
   }
 
+  const manualBaselineSaved = await page.evaluate(async () => {
+    const auth = JSON.parse(sessionStorage.getItem('fintracker.auth'));
+    const response = await fetch('/api/manual/crypto-holdings', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ holdings: [{ symbol: 'XRP', quantity: 12.5, source: 'manual', currency: 'USD', market: 'crypto', account_id: 'other-account' }] }),
+    });
+    return response.ok;
+  });
+  expect(manualBaselineSaved).toBe(true);
   await page.getByRole('button', { name: 'Manage holdings' }).click();
+  await page.getByRole('button', { name: 'Reload' }).click();
+  await expect(page.locator('#crypto-body input[data-field="symbol"]')).toHaveValue('XRP');
   await expect(page.locator('#manual-modal')).toBeVisible();
   const symbolInputs = page.locator('#crypto-body input[data-field="symbol"]');
   const existingSymbols = await symbolInputs.evaluateAll((inputs) => inputs.map((input) => input.value));
