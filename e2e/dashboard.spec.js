@@ -150,31 +150,6 @@ test('expired bearer token clears the session and asks for login', async ({ page
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('fintracker.auth'))).toBeNull();
 });
 
-test('job history does not render an unparseable started_at as HTML', async ({ page }) => {
-  await page.route('**/api/jobs/valuations/history**', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify([{
-      job: 'valuations',
-      run_id: '2026-09-30_120000',
-      status: 'success',
-      started_at: '<img src=x onerror=alert(1)>',
-      finished_at: '2026-09-30T12:00:05Z',
-      duration_seconds: 5,
-      positions_count: 1,
-      warnings_count: 0,
-      errors_count: 0,
-      missing_prices_count: 0,
-    }]),
-  }));
-  await page.goto('/jobs.html');
-  await page.locator('#username').fill('demo');
-  await page.locator('#password').fill('test-password');
-  await page.getByRole('button', { name: 'Log in & load' }).click();
-  await expect(page.locator('#history-body img')).toHaveCount(0);
-  await expect(page.locator('#history-body')).toContainText('—');
-});
-
 test('job health displays recorded history and reports an active run conflict', async ({ page }) => {
   await page.goto('/jobs.html');
   await page.locator('#username').fill('demo');
@@ -188,4 +163,25 @@ test('job health displays recorded history and reports an active run conflict', 
   await page.goto('/');
   await expect(page.locator('#total-value')).toContainText('30,000');
   await expect(page.locator('#rows-body')).toContainText('BTC');
+
+  await page.goto('/jobs.html');
+  await page.route('**/api/jobs/valuations/history**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      job: 'valuations',
+      run_id: 'bad-date',
+      status: 'success',
+      started_at: '<img src=x onerror=alert(1)>',
+      finished_at: '2026-09-30T12:00:05Z',
+      duration_seconds: 5,
+      positions_count: 1,
+      warnings_count: 0,
+      errors_count: 0,
+      missing_prices_count: 0,
+    }]),
+  }));
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.locator('#history-body img')).toHaveCount(0);
+  await expect(page.locator('#history-body')).toContainText('—');
 });
