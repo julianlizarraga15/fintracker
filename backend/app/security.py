@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -26,10 +28,24 @@ def _jwt_expires_seconds(settings: Settings | None = None) -> int:
     return _jwt_expires_minutes(settings) * 60
 
 
+def _password_tag(secret: str, password: str) -> str:
+    return hmac.new(secret.encode("utf-8"), password.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _current_password(settings: Settings | None = None) -> str:
+    password = settings.DEMO_AUTH_PASSWORD if settings is not None else config.DEMO_AUTH_PASSWORD
+    return password or ""
+
+
 def _issue_token(subject: str, settings: Settings | None = None) -> str:
-    jwt_secret = _jwt_secret(settings)
+    jwt_secret = _jwt_secret(settings) or ""
     expiration = datetime.utcnow() + timedelta(minutes=_jwt_expires_minutes(settings))
-    payload = {"sub": subject, "exp": expiration, "iat": datetime.utcnow()}
+    payload = {
+        "sub": subject,
+        "exp": expiration,
+        "iat": datetime.utcnow(),
+        "pwd": _password_tag(jwt_secret, _current_password(settings)),
+    }
     return jwt.encode(payload, jwt_secret, algorithm=JWT_ALGORITHM)
 
 
@@ -45,8 +61,13 @@ def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(_auth_scheme
         raise HTTPException(status_code=401, detail="Authorization header missing.")
     token = credentials.credentials
     try:
-        return jwt.decode(token, jwt_secret, algorithms=[JWT_ALGORITHM])
+        claims = jwt.decode(token, jwt_secret, algorithms=[JWT_ALGORITHM])
     except ExpiredSignatureError as exc:
         raise HTTPException(status_code=401, detail="Token expired.") from exc
     except PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid token.") from exc
+    presented = claims.get("pwd")
+    expected = _password_tag(jwt_secret, _current_password())
+    if not isinstance(presented, str) or not hmac.compare_digest(presented, expected):
+        raise HTTPException(status_code=401, detail="Invalid token.")
+    return claims

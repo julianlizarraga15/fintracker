@@ -66,7 +66,7 @@ def load_manual_crypto_holdings(path: str | None = None) -> ManualCryptoHoldings
     try:
         payload = json.loads(file_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Unable to load manual crypto holdings from {file_path}.") from exc
+        raise ValueError("Unable to load manual crypto holdings.") from exc
 
     if isinstance(payload, dict):
         entries = payload.get("holdings") or payload.get("positions") or []

@@ -33,6 +33,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "JWT_EXPIRES_MINUTES", 15)
     monkeypatch.setattr(config, "ACCOUNT_ID", "acct-test")
     monkeypatch.setattr(config, "CRYPTO_HOLDINGS_FILE", str(tmp_path / "crypto.json"))
+    login_rate_limit._attempts_by_client = login_rate_limit.OrderedDict()
     return TestClient(app)
 
 
@@ -115,6 +116,12 @@ def test_login_rate_limit_trusts_forwarded_ip_only_from_nginx(monkeypatch):
     assert auth_router._client_key(untrusted_request) == TEST_UNTRUSTED_PEER_IP
 
 
+def test_public_docs_are_disabled(client):
+    assert client.get("/health").status_code == 200
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404
+
+
 def test_health_and_protected_api_routes_are_reachable(client):
     assert client.get("/health").json() == {"ok": True}
     for path in (
@@ -168,6 +175,40 @@ def test_latest_valuation_http_response_reads_snapshot_file(client, monkeypatch,
         headers={"Authorization": f"Bearer {login['access_token']}"},
     )
     assert other_account.status_code == 403
+
+    empty_account = tmp_path / "valuations" / "dt=2026-09-30" / "account=acct-test"
+    for child in empty_account.iterdir():
+        child.unlink()
+    missing = client.get(
+        "/valuations/latest?account_id=acct-test",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert missing.status_code == 404
+    assert str(tmp_path) not in missing.text
+    assert "account=" not in missing.text
+
+
+def test_manual_holdings_load_error_hides_path(client):
+    holdings_path = Path(config.CRYPTO_HOLDINGS_FILE)
+    holdings_path.parent.mkdir(parents=True, exist_ok=True)
+    holdings_path.write_text("{", encoding="utf-8")
+    login = client.post("/auth/login", json={"username": "demo", "password": "secret"}).json()
+    response = client.get(
+        "/manual/crypto-holdings",
+        headers={"Authorization": f"Bearer {login['access_token']}"},
+    )
+    assert response.status_code == 500
+    assert str(holdings_path) not in response.text
+
+
+def test_password_change_invalidates_existing_token(client, monkeypatch):
+    login = client.post("/auth/login", json={"username": "demo", "password": "secret"}).json()
+    headers = {"Authorization": f"Bearer {login['access_token']}"}
+    assert client.get("/manual/crypto-holdings", headers=headers).status_code == 200
+    monkeypatch.setattr(config, "DEMO_AUTH_PASSWORD", "rotated-secret")
+    rejected = client.get("/manual/crypto-holdings", headers=headers)
+    assert rejected.status_code == 401
+    assert rejected.json()["detail"] == "Invalid token."
 
 
 def test_job_trigger_http_status_and_conflict(client, monkeypatch):

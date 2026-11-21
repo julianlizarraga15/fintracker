@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements-test.txt
 COPY backend /app/backend
 COPY infra/binance /app/infra/binance
 COPY scripts /app/scripts
+COPY nginx.conf /app/nginx.conf
 
 ENV PYTHONPATH=/app
 ENV PYTHON_DOTENV_DISABLED=1

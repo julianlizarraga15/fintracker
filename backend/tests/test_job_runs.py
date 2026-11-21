@@ -100,6 +100,29 @@ def test_job_run_history_orders_by_run_id_when_file_mtime_is_misleading(monkeypa
     assert [run.run_id for run in history] == ["2026-06-30_120000", "2026-06-21_120000"]
 
 
+def test_latest_job_run_returns_file_names_only(monkeypatch, tmp_path: Path):
+    runs_dir = tmp_path / "valuations"
+    runs_dir.mkdir()
+    payload = {
+        "job": "valuations",
+        "run_id": "2026-06-21_120000",
+        "status": "success",
+        "log_file": str(tmp_path / "nested" / "run.log"),
+        "outputs": {"valuations": {"parquet": str(tmp_path / "account=acct" / "valuations.parquet")}},
+    }
+    (runs_dir / "latest.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    import backend.app.job_runs as job_runs_module
+
+    monkeypatch.setattr(job_runs_module, "JOB_RUNS_ROOT", tmp_path)
+
+    latest = get_latest_job_run(job_name="valuations")
+
+    assert latest.log_file == "run.log"
+    assert latest.outputs["valuations"]["parquet"] == "valuations.parquet"
+    assert "account=" not in latest.model_dump_json()
+
+
 def test_latest_job_run_uses_newest_run_file_when_latest_json_is_stale(monkeypatch, tmp_path: Path):
     runs_dir = tmp_path / "valuations"
     runs_dir.mkdir()

@@ -240,16 +240,38 @@ def _job_dir(job_name: str) -> Path:
     return JOB_RUNS_ROOT / sanitized
 
 
+def _file_name(value: object) -> object:
+    if not isinstance(value, str) or value == "":
+        return value
+    return Path(value).name
+
+
+def _redact_job_paths(payload: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(payload)
+    if "log_file" in redacted:
+        redacted["log_file"] = _file_name(redacted.get("log_file"))
+    outputs = redacted.get("outputs")
+    if isinstance(outputs, dict):
+        cleaned: dict[str, Any] = {}
+        for resource, files in outputs.items():
+            if isinstance(files, dict):
+                cleaned[resource] = {kind: _file_name(path) for kind, path in files.items()}
+            else:
+                cleaned[resource] = files
+        redacted["outputs"] = cleaned
+    return redacted
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
     except FileNotFoundError as exc:
-        raise JobRunNotFound(f"No job run found at {path}.") from exc
+        raise JobRunNotFound("Job run record is missing.") from exc
     except json.JSONDecodeError as exc:
-        raise JobRunNotFound(f"Job run file {path} is not valid JSON.") from exc
+        raise JobRunNotFound("Job run record is not valid JSON.") from exc
     if not isinstance(payload, dict):
-        raise JobRunNotFound(f"Job run file {path} did not contain an object.")
+        raise JobRunNotFound("Job run record did not contain an object.")
     return payload
 
 
@@ -291,10 +313,10 @@ def get_latest_job_run(job_name: str = "valuations") -> JobRunResponse:
     if latest_path.exists():
         latest_payload = _read_json(latest_path)
         if newest_run_path is None or str(latest_payload.get("run_id") or "") >= newest_run_path.stem:
-            return JobRunResponse(**latest_payload)
+            return JobRunResponse(**_redact_job_paths(latest_payload))
     if newest_run_path is None:
         raise JobRunNotFound(f"No recorded runs for job '{job_name}'.")
-    return JobRunResponse(**_read_json(newest_run_path))
+    return JobRunResponse(**_redact_job_paths(_read_json(newest_run_path)))
 
 
 def get_job_run_history(job_name: str = "valuations", limit: int = DEFAULT_HISTORY_LIMIT) -> list[JobRunSummary]:

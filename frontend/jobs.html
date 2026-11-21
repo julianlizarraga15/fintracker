@@ -377,7 +377,7 @@
       function formatDateTime(value) {
         if (!value) return "—";
         const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
+        if (Number.isNaN(date.getTime())) return "—";
         return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       }
 
@@ -520,7 +520,7 @@
             const status = row.status || "unknown";
             return `
               <tr>
-                <td><div>${formatDateTime(row.started_at)}</div><div class="muted mono">${escapeHtml(row.run_id)}</div></td>
+                <td><div>${escapeHtml(formatDateTime(row.started_at))}</div><div class="muted mono">${escapeHtml(row.run_id)}</div></td>
                 <td><span class="status" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
                 <td>${formatDuration(row.duration_seconds)}</td>
                 <td>${row.positions_count ?? "—"}</td>

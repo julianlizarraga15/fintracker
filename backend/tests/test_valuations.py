@@ -69,7 +69,7 @@ def test_get_latest_valuation_snapshot_builds_response(tmp_path, monkeypatch):
     assert response.rows[1].status == "stale"
     assert response.rows[0].portfolio_share_pct == pytest.approx(65.22495, rel=1e-3)
     assert response.rows[1].portfolio_share_pct == pytest.approx(34.77505, rel=1e-3)
-    assert response.source_file.endswith(".csv")
+    assert response.source_file == "valuations_2024-11-15.csv"
 
 
 def test_get_latest_valuation_snapshot_builds_source_allocations(tmp_path, monkeypatch):

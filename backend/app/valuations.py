@@ -49,7 +49,7 @@ def _pick_snapshot_file(account_dir: Path) -> Path:
     csv_files = sorted(account_dir.glob("valuations_*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
     if csv_files:
         return csv_files[0]
-    raise SnapshotNotFound(f"No valuation files under {account_dir}.")
+    raise SnapshotNotFound("No valuation files for this account.")
 
 
 def _read_snapshot(path: Path) -> pd.DataFrame:
@@ -229,7 +229,7 @@ def get_latest_valuation_snapshot(account_id: str) -> LatestValuationResponse:
             snapshot_path = _pick_snapshot_file(account_dir)
             df = _read_snapshot(snapshot_path)
             if df.empty:
-                raise SnapshotNotFound(f"Valuation file {snapshot_path} is empty.")
+                raise SnapshotNotFound("Valuation file is empty.")
 
             snapshot_dt = _parse_date(df["snapshot_dt"].iloc[0] if "snapshot_dt" in df else dt_value)
             computed_ts = _parse_datetime(df["computed_ts"].iloc[0] if "computed_ts" in df else datetime.utcnow())
@@ -247,7 +247,7 @@ def get_latest_valuation_snapshot(account_id: str) -> LatestValuationResponse:
                 totals=totals,
                 rows=rows,
                 source_allocations=source_allocations,
-                source_file=str(snapshot_path),
+                source_file=snapshot_path.name,
             )
         except SnapshotNotFound as exc:
             last_error = exc
